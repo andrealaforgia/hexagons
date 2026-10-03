@@ -18,6 +18,8 @@
 #define MAX_NEW_HEXAGON_VALUE 8
 #define MAX_HEXAGON_VALUE 1024
 #define MIN_LINE_LENGTH 4
+// A merge is worth this many times the number, however long the lines
+#define MERGE_MULTIPLIER 4
 
 typedef struct {
   int cols;
@@ -75,9 +77,10 @@ click_result_t click_board_cell(board_t* board, cell_t cell);
  * @brief Apply the consequences of the last move, once it has been shown
  *
  * If the moved hexagon completed one or more straight lines of at least
- * MIN_LINE_LENGTH equal numbers, every hexagon in those lines is removed and
- * the moved one takes their sum, itself included. The cells emptied are left
- * in merged. Does nothing if no move is waiting to be settled.
+ * MIN_LINE_LENGTH equal numbers, every other hexagon in those lines is
+ * removed and the moved one carries MERGE_MULTIPLIER times its number. The
+ * cells emptied are left in merged. Does nothing if no move is waiting to be
+ * settled.
  *
  * @return true if hexagons merged
  */

@@ -662,7 +662,8 @@ static bool play_hexagon_onto(board_t* board, cell_t target, int value) {
   return settle_board_move(board);
 }
 
-static void four_in_a_line_merge_into_their_sum_where_the_move_ended(void) {
+static void a_line_merges_into_four_times_its_number_where_the_move_ended(
+    void) {
   for (int direction = 0; direction < HEX_DIRECTION_COUNT; ++direction) {
     for (int length = 4; length <= 6; ++length) {
       // The moved hexagon completes the line at any position along it
@@ -678,7 +679,9 @@ static void four_in_a_line_merge_into_their_sum_where_the_move_ended(void) {
 
         assert(play_hexagon_onto(&board, target, 2));
         assert(board_hexagon_count(&board) == 1);
-        assert(board_value(&board, target) == 2 * length);
+        // Four times the number however long the line, so that every
+        // number stays a power of two
+        assert(board_value(&board, target) == 8);
         destroy_board(&board);
       }
     }
@@ -730,8 +733,8 @@ static void lines_crossing_where_the_move_ended_merge_together(void) {
   set_board_value(&board, bystander, 4);
 
   assert(play_hexagon_onto(&board, target, 4));
-  // Seven hexagons merged, the moved one counted once
-  assert(board_value(&board, target) == 28);
+  // Seven hexagons merged into one, still worth four times the number
+  assert(board_value(&board, target) == 16);
   assert(board_value(&board, bystander) == 4);
   assert(board_hexagon_count(&board) == 2);
   destroy_board(&board);
@@ -846,7 +849,7 @@ int main(int argc, char** argv) {
   else if (!strcmp(argv[1], "font"))
     the_number_font_loads_and_its_numbers_fit();
   else if (!strcmp(argv[1], "merge"))
-    four_in_a_line_merge_into_their_sum_where_the_move_ended();
+    a_line_merges_into_four_times_its_number_where_the_move_ended();
   else if (!strcmp(argv[1], "three"))
     three_in_a_line_do_not_merge();
   else if (!strcmp(argv[1], "equal"))

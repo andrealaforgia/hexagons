@@ -181,7 +181,7 @@ bool settle_board_move(board_t* board) {
   if (board->merged_count == 0) {
     return false;
   }
-  set_board_value(board, moved, value * (1 + board->merged_count));
+  set_board_value(board, moved, value * MERGE_MULTIPLIER);
   return true;
 }
 
