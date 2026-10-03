@@ -63,6 +63,8 @@ TESTS = (
     "game_over",
     "new_game",
     "flash",
+    "hand",
+    "hand_scale",
 )
 
 

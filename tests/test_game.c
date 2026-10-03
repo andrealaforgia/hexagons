@@ -11,6 +11,7 @@
 #include "game_constants.h"
 #include "game_over_effects.h"
 #include "game_settings.h"
+#include "hand_cursor.h"
 #include "hex_colors.h"
 #include "hex_grid.h"
 #include "number_text.h"
@@ -1293,6 +1294,50 @@ static void game_over_flashes_and_its_prompt_bobs_gently(void) {
   assert(game_over_prompt_offset(0, amplitude) == 0);
 }
 
+static void the_pointer_is_a_hand_with_a_solid_outline(void) {
+  int fill = 0, outline = 0;
+  for (int y = 0; y < HAND_CURSOR_HEIGHT; ++y) {
+    for (int x = 0; x < HAND_CURSOR_WIDTH; ++x) {
+      uint32_t pixel = hand_cursor_pixel(x, y, 1);
+      assert(pixel == HAND_CURSOR_CLEAR || pixel == HAND_CURSOR_FILL ||
+             pixel == HAND_CURSOR_OUTLINE);
+      outline += pixel == HAND_CURSOR_OUTLINE;
+      if (pixel != HAND_CURSOR_FILL) continue;
+      ++fill;
+      // The fill never touches the background: the outline has no holes
+      assert(hand_cursor_pixel(x - 1, y, 1) != HAND_CURSOR_CLEAR);
+      assert(hand_cursor_pixel(x + 1, y, 1) != HAND_CURSOR_CLEAR);
+      assert(hand_cursor_pixel(x, y - 1, 1) != HAND_CURSOR_CLEAR);
+      assert(hand_cursor_pixel(x, y + 1, 1) != HAND_CURSOR_CLEAR);
+    }
+  }
+  assert(fill > 100 && outline > 50);
+  // It points with the tip of its finger, at the very top
+  assert(HAND_CURSOR_HOT_Y == 0);
+  assert(hand_cursor_pixel(HAND_CURSOR_HOT_X, HAND_CURSOR_HOT_Y, 1) !=
+         HAND_CURSOR_CLEAR);
+  // Nothing beyond its edges
+  assert(hand_cursor_pixel(-1, 0, 1) == HAND_CURSOR_CLEAR);
+  assert(hand_cursor_pixel(0, HAND_CURSOR_HEIGHT, 1) == HAND_CURSOR_CLEAR);
+  assert(hand_cursor_pixel(HAND_CURSOR_WIDTH, 0, 1) == HAND_CURSOR_CLEAR);
+}
+
+static void the_pointer_is_enlarged_in_whole_pixels(void) {
+  for (int scale = 1; scale <= 5; ++scale) {
+    for (int y = 0; y < HAND_CURSOR_HEIGHT * scale; ++y) {
+      for (int x = 0; x < HAND_CURSOR_WIDTH * scale; ++x) {
+        assert(hand_cursor_pixel(x, y, scale) ==
+               hand_cursor_pixel(x / scale, y / scale, 1));
+      }
+    }
+  }
+  // Bigger than a system pointer on any screen, and bigger on bigger ones
+  assert(hand_cursor_scale(600) >= 2);
+  assert(hand_cursor_scale(900) == 3);
+  assert(hand_cursor_scale(1440) > hand_cursor_scale(900));
+  assert(hand_cursor_scale(0) >= 2);
+}
+
 int main(int argc, char** argv) {
   assert(argc == 2);
   if (!strcmp(argv[1], "lifecycle"))
@@ -1393,6 +1438,10 @@ int main(int argc, char** argv) {
     each_new_game_deals_a_different_board();
   else if (!strcmp(argv[1], "flash"))
     game_over_flashes_and_its_prompt_bobs_gently();
+  else if (!strcmp(argv[1], "hand"))
+    the_pointer_is_a_hand_with_a_solid_outline();
+  else if (!strcmp(argv[1], "hand_scale"))
+    the_pointer_is_enlarged_in_whole_pixels();
   else
     return 1;
   return 0;

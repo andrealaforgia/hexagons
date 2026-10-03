@@ -27,6 +27,7 @@ typedef struct {
   unsigned seed;  // Decides how the hexagons fall
   number_text_t number_text;
   game_over_text_t game_over_text;
+  SDL_Cursor* cursor;  // The hand; NULL if the system pointer is in use
 } game_t, *game_ptr;
 
 game_t init_game(game_settings_t game_settings);
