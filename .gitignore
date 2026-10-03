@@ -1,0 +1,8 @@
+hexagons
+*.o
+*.dSYM
+**/.DS_Store
+**/.vscode/
+
+*.d
+__pycache__/
