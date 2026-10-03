@@ -18,7 +18,8 @@
 #define WALL_CELL (-1)
 #define MAX_NEW_HEXAGON_VALUE 8
 #define MAX_HEXAGON_VALUE 1024
-// How many equal hexagons must touch to merge
+// How many equal hexagons must touch to merge, on a board of ordinary size
+// or smaller; see min_group_size_for
 #define MIN_GROUP_SIZE 4
 
 typedef struct {
@@ -29,9 +30,10 @@ typedef struct {
   cell_t selection;  // The hexagon the player picked; valid if has_selection
   cell_t* path;      // Cells the last moved hexagon went through, ends included
   int path_length;
-  int spawn_count;    // New hexagons after each move that merges nothing
-  bool move_pending;  // A hexagon was moved and the move is not settled yet
-  cell_t* merged;     // Cells emptied, or turned to wall, by the last merge
+  int min_group_size;  // How many equal hexagons must touch to merge
+  int spawn_count;     // New hexagons after each move that merges nothing
+  bool move_pending;   // A hexagon was moved and the move is not settled yet
+  cell_t* merged;      // Cells emptied, or turned to wall, by the last merge
   int merged_count;
   int merged_value;  // The number the merged hexagons carried
   int* came_from;    // Working space for finding paths
@@ -94,7 +96,7 @@ typedef enum {
  * @brief Apply the consequences of the last move, once it has been shown
  *
  * If the moved hexagon now touches a group of equal numbers that makes at
- * least MIN_GROUP_SIZE with it, whatever its shape, every other hexagon in
+ * least min_group_size with it, whatever its shape, every other hexagon in
  * the group is removed and the moved one carries their sum, rounded down to
  * a power of two. The cells emptied are left in merged.
  *
@@ -115,6 +117,15 @@ bool board_has_move(const board_t* board);
 /** @brief Empty the board for a new game */
 void reset_board(board_t* board);
 
+/**
+ * @brief How many equal hexagons must touch to merge on a board of this size
+ *
+ * MIN_GROUP_SIZE up to about 300 cells, then growing with the width of the
+ * board rather than its area: MIN_GROUP_SIZE * sqrt(cells / 300), rounded.
+ * A board with four times the cells needs groups twice as big.
+ */
+int min_group_size_for(int cell_count);
+
 /** @brief How many hexagons appear after a move that merges nothing */
 int spawn_hexagon_count(int cell_count);
 
@@ -125,7 +136,7 @@ int initial_hexagon_count(int cell_count);
  * two up to MAX_NEW_HEXAGON_VALUE
  *
  * A new hexagon never completes a group that would merge: its cell and
- * number are chosen so that fewer than MIN_GROUP_SIZE equal numbers touch.
+ * number are chosen so that fewer than min_group_size equal numbers touch.
  *
  * @return How many were added: fewer than asked when the board fills up or
  * no number fits in any empty cell

@@ -663,8 +663,10 @@ static bool play_hexagon_onto(board_t* board, cell_t target, int value) {
   set_board_value(board, from, value);
   assert(click_board_cell(board, from) == CLICK_SELECTED);
   assert(click_board_cell(board, target) == CLICK_MOVED);
-  // These boards are laid out by hand: keep new hexagons off them
+  // These boards are laid out by hand: keep new hexagons off them, and
+  // play by the rule for a board of ordinary size whatever theirs is
   board->spawn_count = 0;
+  board->min_group_size = MIN_GROUP_SIZE;
   random_source_t random = create_random_source(1);
   settle_result_t result = settle_board_move(board, &random);
   return result == SETTLED_MERGE || result == SETTLED_WALL;
@@ -1044,7 +1046,7 @@ static bool has_group_ready_to_merge(board_t* board) {
   for (int row = 0; row < board->rows; ++row) {
     for (int col = 0; col < board->cols; ++col) {
       cell_t cell = {col, row};
-      if (board_group_size(board, cell) >= MIN_GROUP_SIZE) return true;
+      if (board_group_size(board, cell) >= board->min_group_size) return true;
     }
   }
   return false;
@@ -1084,6 +1086,55 @@ static void a_dealt_board_has_no_group_ready_to_merge(void) {
     // Far more crowded than a real deal, to give groups every chance
     assert(populate_board(&board, &random, 190) == 190);
     assert(!has_group_ready_to_merge(&board));
+    destroy_board(&board);
+
+    // A bigger board asks for bigger groups, and is dealt accordingly
+    assert(init_board(&board, 30, 20));
+    assert(board.min_group_size == 6);
+    assert(populate_board(&board, &random, 400) == 400);
+    assert(!has_group_ready_to_merge(&board));
+    destroy_board(&board);
+  }
+}
+
+static void bigger_boards_need_bigger_groups(void) {
+  // Four on the board every screen gets today, about 300 cells
+  assert(min_group_size_for(300) == 4);
+  assert(min_group_size_for(315) == 4);
+  assert(min_group_size_for(360) == 4);
+  // Never fewer, however small the board
+  assert(min_group_size_for(1) == 4);
+  assert(min_group_size_for(100) == 4);
+  // Growing with the width of the board, not its area: four times the
+  // cells doubles the group
+  assert(min_group_size_for(480) == 5);
+  assert(min_group_size_for(675) == 6);
+  assert(min_group_size_for(1200) == 8);
+  assert(min_group_size_for(4800) == 16);
+  for (int cells = 1; cells < 5000; ++cells) {
+    assert(min_group_size_for(cells + 1) >= min_group_size_for(cells));
+  }
+
+  // On a board of 600 cells five in touch do nothing and six merge
+  for (int length = 5; length <= 6; ++length) {
+    board_t board;
+    assert(init_board(&board, 30, 20));
+    assert(board.min_group_size == 6);
+    board.spawn_count = 0;
+    random_source_t random = create_random_source(1);
+    cell_t start = {10, 10}, from = {0, 0};
+    cell_t target = lay_line(&board, start, 0, length - 1, 2);
+    set_board_value(&board, from, 2);
+    click_board_cell(&board, from);
+    assert(click_board_cell(&board, target) == CLICK_MOVED);
+    if (length < 6) {
+      assert(settle_board_move(&board, &random) == SETTLED_SPAWN);
+      assert(board_hexagon_count(&board) == 5);
+    } else {
+      assert(settle_board_move(&board, &random) == SETTLED_MERGE);
+      assert(board_hexagon_count(&board) == 1);
+      assert(board_value(&board, target) == 8);
+    }
     destroy_board(&board);
   }
 }
@@ -1525,6 +1576,8 @@ int main(int argc, char** argv) {
     four_equal_hexagons_merge_whatever_shape_they_make();
   else if (!strcmp(argv[1], "deal"))
     a_dealt_board_has_no_group_ready_to_merge();
+  else if (!strcmp(argv[1], "group_size"))
+    bigger_boards_need_bigger_groups();
   else if (!strcmp(argv[1], "no_fit"))
     a_cell_where_no_number_fits_is_left_empty();
   else if (!strcmp(argv[1], "no_move"))

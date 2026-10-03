@@ -62,6 +62,7 @@ TESTS = (
     "shapes",
     "deal",
     "no_fit",
+    "group_size",
     "no_move",
     "game_over",
     "new_game",

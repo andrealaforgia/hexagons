@@ -9,6 +9,8 @@
 
 #define INITIAL_FILL_FRACTION 0.10
 #define SPAWN_FRACTION 0.01
+// The board on which MIN_GROUP_SIZE hexagons make a group
+#define ORDINARY_CELL_COUNT 300.0
 // New hexagons carry 1, 2, 4 or 8
 #define NEW_HEXAGON_VALUE_COUNT 4
 
@@ -33,6 +35,7 @@ bool init_board(board_t* board, int cols, int rows) {
   board->path_length = 0;
   board->move_pending = false;
   board->spawn_count = spawn_hexagon_count(cols * rows);
+  board->min_group_size = min_group_size_for(cols * rows);
   board->merged_count = 0;
   board->merged_value = EMPTY_CELL;
   board->merged = calloc(cells, sizeof(cell_t));
@@ -208,7 +211,7 @@ settle_result_t settle_board_move(board_t* board, random_source_t* random) {
   int size = gather_group(board, moved, value, 0);
   board->merged_count = 0;
   board->merged_value = value;
-  if (size < MIN_GROUP_SIZE) {
+  if (size < board->min_group_size) {
     populate_board(board, random, board->spawn_count);
     return SETTLED_SPAWN;
   }
@@ -269,6 +272,11 @@ void reset_board(board_t* board) {
   board->merged_count = 0;
 }
 
+int min_group_size_for(int cells) {
+  int size = (int)lround(MIN_GROUP_SIZE * sqrt(cells / ORDINARY_CELL_COUNT));
+  return size < MIN_GROUP_SIZE ? MIN_GROUP_SIZE : size;
+}
+
 int spawn_hexagon_count(int cells) {
   int count = (int)lround(cells * SPAWN_FRACTION);
   return count < 1 ? 1 : count;
@@ -298,7 +306,8 @@ static bool add_hexagon(board_t* board, random_source_t* random, int empty) {
     cell_t cell = {index % board->cols, index / board->cols};
     for (int j = 0; j < NEW_HEXAGON_VALUE_COUNT; ++j) {
       int value = 1 << ((first_value + j) % NEW_HEXAGON_VALUE_COUNT);
-      if (gather_group(board, cell, value, MIN_GROUP_SIZE) < MIN_GROUP_SIZE) {
+      if (gather_group(board, cell, value, board->min_group_size) <
+          board->min_group_size) {
         board->values[index] = value;
         return true;
       }
