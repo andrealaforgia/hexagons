@@ -670,15 +670,16 @@ static bool play_hexagon_onto(board_t* board, cell_t target, int value) {
   return result == SETTLED_MERGE || result == SETTLED_WALL;
 }
 
-static void a_line_merges_into_four_times_its_number_where_the_move_ended(
-    void) {
+static void a_line_merges_into_its_sum_rounded_down_to_a_power_of_two(void) {
   for (int direction = 0; direction < HEX_DIRECTION_COUNT; ++direction) {
-    for (int length = 4; length <= 6; ++length) {
+    // Four to seven 2s sum to less than 16, so make 8; eight make 16
+    const int sums[] = {0, 0, 0, 0, 8, 8, 8, 8, 16};
+    for (int length = 4; length <= 8; ++length) {
       // The moved hexagon completes the line at any position along it
       for (int gap = 0; gap < length; ++gap) {
         board_t board;
-        assert(init_board(&board, 16, 16));
-        cell_t start = {8, 8};
+        assert(init_board(&board, 24, 24));
+        cell_t start = {12, 12};
         lay_line(&board, start, direction, length, 2);
         cell_t target = start;
         for (int i = 0; i < gap; ++i) target = hex_neighbour(target, direction);
@@ -687,9 +688,7 @@ static void a_line_merges_into_four_times_its_number_where_the_move_ended(
 
         assert(play_hexagon_onto(&board, target, 2));
         assert(board_hexagon_count(&board) == 1);
-        // Four times the number however long the line, so that every
-        // number stays a power of two
-        assert(board_value(&board, target) == 8);
+        assert(board_value(&board, target) == sums[length]);
         destroy_board(&board);
       }
     }
@@ -729,23 +728,53 @@ static void only_equal_numbers_make_a_line(void) {
   destroy_board(&broken);
 }
 
-static void lines_crossing_where_the_move_ended_merge_together(void) {
+static void everything_equal_that_touches_merges_together(void) {
   board_t board;
   assert(init_board(&board, 16, 16));
   cell_t target = {8, 8};
   // Three to the east and three to the south-east of the target
   lay_line(&board, hex_neighbour(target, 0), 0, 3, 4);
   lay_line(&board, hex_neighbour(target, 1), 1, 3, 4);
-  // And one lone 4 to the south-west: a line of two, which stays
-  cell_t bystander = hex_neighbour(target, 2);
-  set_board_value(&board, bystander, 4);
+  // One more touching the target, and one that touches nothing
+  cell_t touching = hex_neighbour(target, 3), apart = {2, 2};
+  set_board_value(&board, touching, 4);
+  set_board_value(&board, apart, 4);
 
   assert(play_hexagon_onto(&board, target, 4));
-  // Seven hexagons merged into one, still worth four times the number
-  assert(board_value(&board, target) == 16);
-  assert(board_value(&board, bystander) == 4);
+  // Eight 4s merged into one: 32
+  assert(board_value(&board, target) == 32);
+  assert(board_value(&board, touching) == EMPTY_CELL);
+  assert(board_value(&board, apart) == 4);
   assert(board_hexagon_count(&board) == 2);
   destroy_board(&board);
+}
+
+static void four_equal_hexagons_merge_whatever_shape_they_make(void) {
+  cell_t target = {8, 8};
+  cell_t east = hex_neighbour(target, 0);
+  cell_t hub = hex_neighbour(target, 3);
+  const cell_t shapes[][3] = {
+      // Stacked one above the other, which zigzags on this grid
+      {{8, 9}, {8, 10}, {8, 11}},
+      // A line that bends
+      {east, hex_neighbour(east, 0), hex_neighbour(hex_neighbour(east, 0), 1)},
+      // Three spokes round the moved hexagon, touching only through it
+      {hex_neighbour(target, 0), hex_neighbour(target, 2),
+       hex_neighbour(target, 4)},
+      // The moved hexagon as one spoke of three round another
+      {hub, hex_neighbour(hub, 2), hex_neighbour(hub, 4)},
+      // A tight clump
+      {east, hex_neighbour(target, 1), hex_neighbour(east, 1)},
+  };
+  for (int shape = 0; shape < 5; ++shape) {
+    board_t board;
+    assert(init_board(&board, 16, 16));
+    for (int i = 0; i < 3; ++i) set_board_value(&board, shapes[shape][i], 2);
+    assert(play_hexagon_onto(&board, target, 2));
+    assert(board_value(&board, target) == 8);
+    assert(board_hexagon_count(&board) == 1);
+    destroy_board(&board);
+  }
 }
 
 static void a_line_merges_only_when_a_move_completes_it(void) {
@@ -788,18 +817,18 @@ static void the_merge_shows_when_the_hexagon_arrives(void) {
     }
   }
   cell_t start = {5, 5}, from = {12, 10};
-  cell_t target = lay_line(board, start, 0, 3, 3);
-  set_board_value(board, from, 3);
+  cell_t target = lay_line(board, start, 0, 3, 2);
+  set_board_value(board, from, 2);
   click_at(state, from);
   click_at(state, target);
   assert(is_playing_stage_travelling(state));
   // Still on its way: nothing has merged yet
   assert(board_hexagon_count(board) == 4);
   while (is_playing_stage_travelling(state)) {
-    assert(board_value(board, target) == 3);
+    assert(board_value(board, target) == 2);
     advance_playing_stage(state, 1.0);
   }
-  assert(board_value(board, target) == 12);
+  assert(board_value(board, target) == 8);
   assert(board_hexagon_count(board) == 1);
   destroy_playing_stage(state);
 }
@@ -1010,18 +1039,30 @@ static void new_hexagons_fill_what_room_is_left(void) {
   destroy_board(&board);
 }
 
-static void new_hexagons_never_merge_by_themselves(void) {
-  // Rows of equal numbers with a gap every fifth cell: one new hexagon in
-  // four lands on a gap that completes a line
+// Whether four or more equal hexagons touch anywhere on the board
+static bool has_group_ready_to_merge(board_t* board) {
+  for (int row = 0; row < board->rows; ++row) {
+    for (int col = 0; col < board->cols; ++col) {
+      cell_t cell = {col, row};
+      if (board_group_size(board, cell) >= MIN_GROUP_SIZE) return true;
+    }
+  }
+  return false;
+}
+
+static void new_hexagons_never_complete_a_group(void) {
+  // Rows of three equal numbers with a gap after each: left to chance, one
+  // new hexagon in four landing on a gap would complete a group
   for (uint32_t seed = 0; seed < 200; ++seed) {
     board_t board;
     assert(init_board(&board, 20, 10));
     for (int row = 2; row < 10; ++row) {
       for (int col = 0; col < 20; ++col) {
         cell_t cell = {col, row};
-        if (col % 5 != 4) set_board_value(&board, cell, 1 << (row % 4));
+        if (col % 4 != 3) set_board_value(&board, cell, 1 << (row % 4));
       }
     }
+    assert(!has_group_ready_to_merge(&board));
     int before = board_hexagon_count(&board);
     random_source_t random = create_random_source(seed);
     cell_t from = {0, 0}, to = {10, 0};
@@ -1029,10 +1070,51 @@ static void new_hexagons_never_merge_by_themselves(void) {
     click_board_cell(&board, from);
     assert(click_board_cell(&board, to) == CLICK_MOVED);
     assert(settle_board_move(&board, &random) == SETTLED_SPAWN);
-    assert(board.merged_count == 0);
     assert(board_hexagon_count(&board) == before + 1 + board.spawn_count);
+    assert(!has_group_ready_to_merge(&board));
     destroy_board(&board);
   }
+}
+
+static void a_dealt_board_has_no_group_ready_to_merge(void) {
+  for (uint32_t seed = 0; seed < 50; ++seed) {
+    board_t board;
+    assert(init_board(&board, 21, 15));
+    random_source_t random = create_random_source(seed);
+    // Far more crowded than a real deal, to give groups every chance
+    assert(populate_board(&board, &random, 190) == 190);
+    assert(!has_group_ready_to_merge(&board));
+    destroy_board(&board);
+  }
+}
+
+static void a_cell_where_no_number_fits_is_left_empty(void) {
+  board_t board;
+  assert(init_board(&board, 11, 11));
+  for (int row = 0; row < 11; ++row) {
+    for (int col = 0; col < 11; ++col) {
+      cell_t cell = {col, row};
+      set_board_value(&board, cell, WALL_CELL);
+    }
+  }
+  // The one empty cell touches three 1s, three 2s, three 4s and three 8s
+  cell_t empty = {5, 5};
+  set_board_value(&board, empty, EMPTY_CELL);
+  lay_line(&board, hex_neighbour(empty, 0), 0, 3, 1);
+  lay_line(&board, hex_neighbour(empty, 1), 1, 3, 2);
+  lay_line(&board, hex_neighbour(empty, 3), 3, 3, 4);
+  lay_line(&board, hex_neighbour(empty, 4), 4, 3, 8);
+  random_source_t random = create_random_source(2);
+  assert(populate_board(&board, &random, 5) == 0);
+  assert(board_value(&board, empty) == EMPTY_CELL);
+
+  // With one of the 4s gone, a 4 is the only number that fits
+  cell_t last_four = {2, 5};
+  assert(board_value(&board, last_four) == 4);
+  set_board_value(&board, last_four, WALL_CELL);
+  assert(populate_board(&board, &random, 5) == 1);
+  assert(board_value(&board, empty) == 4);
+  destroy_board(&board);
 }
 
 static void new_hexagons_appear_when_the_moved_one_arrives(void) {
@@ -1079,15 +1161,24 @@ static void a_merge_beyond_the_highest_number_turns_the_line_to_wall(void) {
     destroy_board(&board);
   }
 
-  // 256 is the last number that can still merge: it makes 1024
-  board_t board;
-  assert(init_board(&board, 16, 16));
-  cell_t start = {8, 8};
-  cell_t target = lay_line(&board, start, 0, 3, 256);
-  assert(play_hexagon_onto(&board, target, 256));
-  assert(board_value(&board, target) == MAX_HEXAGON_VALUE);
-  assert(board_wall_count(&board) == 0);
-  destroy_board(&board);
+  // Four to seven 256s make 1024, the highest number; eight would make
+  // 2048 and turn to wall
+  for (int length = 4; length <= 8; ++length) {
+    board_t board;
+    assert(init_board(&board, 16, 16));
+    cell_t start = {2, 8};
+    cell_t target = lay_line(&board, start, 0, length - 1, 256);
+    assert(play_hexagon_onto(&board, target, 256));
+    if (length < 8) {
+      assert(board_value(&board, target) == MAX_HEXAGON_VALUE);
+      assert(board_wall_count(&board) == 0);
+      assert(board_hexagon_count(&board) == 1);
+    } else {
+      assert(board_wall_count(&board) == 8);
+      assert(board_hexagon_count(&board) == 0);
+    }
+    destroy_board(&board);
+  }
 }
 
 static void walls_cannot_be_selected_moved_or_crossed(void) {
@@ -1393,13 +1484,13 @@ int main(int argc, char** argv) {
   else if (!strcmp(argv[1], "font"))
     the_number_font_loads_and_its_numbers_fit();
   else if (!strcmp(argv[1], "merge"))
-    a_line_merges_into_four_times_its_number_where_the_move_ended();
+    a_line_merges_into_its_sum_rounded_down_to_a_power_of_two();
   else if (!strcmp(argv[1], "three"))
     three_in_a_line_do_not_merge();
   else if (!strcmp(argv[1], "equal"))
     only_equal_numbers_make_a_line();
   else if (!strcmp(argv[1], "crossing"))
-    lines_crossing_where_the_move_ended_merge_together();
+    everything_equal_that_touches_merges_together();
   else if (!strcmp(argv[1], "settle"))
     a_line_merges_only_when_a_move_completes_it();
   else if (!strcmp(argv[1], "arrival"))
@@ -1419,7 +1510,7 @@ int main(int argc, char** argv) {
   else if (!strcmp(argv[1], "spawn_room"))
     new_hexagons_fill_what_room_is_left();
   else if (!strcmp(argv[1], "spawn_merge"))
-    new_hexagons_never_merge_by_themselves();
+    new_hexagons_never_complete_a_group();
   else if (!strcmp(argv[1], "spawn_arrival"))
     new_hexagons_appear_when_the_moved_one_arrives();
   else if (!strcmp(argv[1], "wall"))
@@ -1430,6 +1521,12 @@ int main(int argc, char** argv) {
     walls_take_no_part_in_lines_or_new_hexagons();
   else if (!strcmp(argv[1], "wall_quiet"))
     a_line_turned_to_wall_does_not_explode();
+  else if (!strcmp(argv[1], "shapes"))
+    four_equal_hexagons_merge_whatever_shape_they_make();
+  else if (!strcmp(argv[1], "deal"))
+    a_dealt_board_has_no_group_ready_to_merge();
+  else if (!strcmp(argv[1], "no_fit"))
+    a_cell_where_no_number_fits_is_left_empty();
   else if (!strcmp(argv[1], "no_move"))
     the_game_is_over_when_no_hexagon_can_move();
   else if (!strcmp(argv[1], "game_over"))

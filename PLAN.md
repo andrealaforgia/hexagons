@@ -44,7 +44,7 @@ First test: the path between two cells on an empty board has length equal to the
 Usable: moving a hexagon so that it forms a line of four or more equal numbers removes the line and leaves one hexagon with the sum on the destination cell.
 Work: line detection through the destination cell along the three hex axes, merge applied to the board.
 First test: three 2s in a row plus a fourth 2 moved to the end leaves a single 8 on the destination and three empty cells.
-Decided: every merge is worth four times the number, however many hexagons or lines are involved, so that numbers stay powers of two.
+Decided: four or more equal hexagons that touch merge, whatever shape they make. The result is their sum rounded down to a power of two.
 
 ### 6. Spawning (done)
 Usable: a move that does not merge brings in new hexagons, 1% of the cell count (at least one), and they never trigger a merge on their own. This is the first iteration that is a real game.
@@ -74,8 +74,8 @@ First test: the bobbing offset stays within its amplitude for any time value.
 Each one blocks the iteration named, not the ones before it.
 
 1. Spawn values (iteration 2). Decided by Andrea: every new hexagon is a random number from 1 to 8. Each number has its own border colour, which replaces the random colouring in the spec.
-2. Crossing lines (iteration 5). Decided by Andrea: numbers are powers of two, so a merge is always worth four times the number. Every qualifying line through the destination is cleared.
-3. No automatic merges after a spawn (iteration 6). Proposal: lines formed by spawning are left alone; only the player's move is checked.
+2. What merges (iteration 5). Decided by Andrea: any four or more equal hexagons that touch, in any shape, not only straight lines. The merged hexagon carries their sum rounded down to a power of two (five 2s make 8, eight 2s make 16).
+3. No automatic merges after a spawn (iteration 6). Decided by Andrea: new hexagons must never complete a group. Their cell and number are chosen so that fewer than four equal numbers touch; if no number fits anywhere, fewer hexagons appear.
 4. Wall rule (iteration 7). Proposal: every hexagon in the line becomes wall.
 5. Losing condition (iteration 8). Decided by Andrea: the game ends when no hexagon can move. "GAME OVER" flashes in yellow at the centre, with a small "Press space to restart or ESC to exit" bobbing gently. Score is not decided.
 6. Unreachable target (iteration 4). Proposal: the click is ignored and the selection stays.

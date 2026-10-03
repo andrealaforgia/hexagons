@@ -156,20 +156,46 @@ static click_result_t move_selection_to(board_t* board, cell_t target) {
   return CLICK_MOVED;
 }
 
-// Length of the run of cells holding the value that starts next to a cell
-// and goes in one direction; the cells are added to merged if asked to
-static int equal_run(board_t* board, cell_t cell, int direction, int value,
-                     bool collect) {
-  int length = 0;
-  cell_t next = hex_neighbour(cell, direction);
-  while (board_value(board, next) == value) {
-    if (collect) {
-      board->merged[board->merged_count++] = next;
-    }
-    ++length;
-    next = hex_neighbour(next, direction);
+// Gathers in queue the cells holding a value that are joined to a cell
+// through neighbours holding it too, the cell first and counted whatever it
+// holds. Stops early once it has found limit of them, unless limit is 0.
+static int gather_group(board_t* board, cell_t cell, int value, int limit) {
+  for (int i = 0; i < cell_count(board); ++i) {
+    board->came_from[i] = UNVISITED;
   }
-  return length;
+  int start = cell_index(board, cell);
+  int head = 0, tail = 0;
+  board->queue[tail++] = start;
+  board->came_from[start] = start;
+  while (head < tail && (limit == 0 || tail < limit)) {
+    int index = board->queue[head++];
+    cell_t member = {index % board->cols, index / board->cols};
+    for (int direction = 0; direction < HEX_DIRECTION_COUNT; ++direction) {
+      cell_t next = hex_neighbour(member, direction);
+      if (!contains(board, next) || board_value(board, next) != value) {
+        continue;
+      }
+      int next_index = cell_index(board, next);
+      if (board->came_from[next_index] == UNVISITED) {
+        board->came_from[next_index] = index;
+        board->queue[tail++] = next_index;
+      }
+    }
+  }
+  return tail;
+}
+
+int board_group_size(board_t* board, cell_t cell) {
+  int value = board_value(board, cell);
+  return is_hexagon(value) ? gather_group(board, cell, value, 0) : 0;
+}
+
+static int largest_power_of_two_up_to(int number) {
+  int power = 1;
+  while (power * 2 <= number) {
+    power *= 2;
+  }
+  return power;
 }
 
 settle_result_t settle_board_move(board_t* board, random_source_t* random) {
@@ -179,27 +205,23 @@ settle_result_t settle_board_move(board_t* board, random_source_t* random) {
   board->move_pending = false;
   cell_t moved = board->path[board->path_length - 1];
   int value = board_value(board, moved);
+  int size = gather_group(board, moved, value, 0);
   board->merged_count = 0;
   board->merged_value = value;
-  // A line runs both ways from the moved hexagon along each of three axes
-  for (int direction = 0; direction < HEX_DIRECTION_COUNT / 2; ++direction) {
-    int opposite = direction + HEX_DIRECTION_COUNT / 2;
-    int length = 1 + equal_run(board, moved, direction, value, false) +
-                 equal_run(board, moved, opposite, value, false);
-    if (length >= MIN_LINE_LENGTH) {
-      equal_run(board, moved, direction, value, true);
-      equal_run(board, moved, opposite, value, true);
-    }
-  }
-  if (board->merged_count == 0) {
+  if (size < MIN_GROUP_SIZE) {
     populate_board(board, random, board->spawn_count);
     return SETTLED_SPAWN;
   }
-  bool walled = value * MERGE_MULTIPLIER > MAX_HEXAGON_VALUE;
-  for (int i = 0; i < board->merged_count; ++i) {
-    set_board_value(board, board->merged[i], walled ? WALL_CELL : EMPTY_CELL);
+  int merged_value = largest_power_of_two_up_to(value * size);
+  bool walled = merged_value > MAX_HEXAGON_VALUE;
+  // The moved hexagon is first in the queue; the rest are the others
+  for (int i = 1; i < size; ++i) {
+    int index = board->queue[i];
+    cell_t cell = {index % board->cols, index / board->cols};
+    board->merged[board->merged_count++] = cell;
+    board->values[index] = walled ? WALL_CELL : EMPTY_CELL;
   }
-  set_board_value(board, moved, walled ? WALL_CELL : value * MERGE_MULTIPLIER);
+  set_board_value(board, moved, walled ? WALL_CELL : merged_value);
   return walled ? SETTLED_WALL : SETTLED_MERGE;
 }
 
@@ -266,12 +288,29 @@ static int nth_empty_cell(const board_t* board, int n) {
   return -1;
 }
 
+// Puts a new hexagon on the first empty cell, counting from a random one,
+// that takes a number without completing a group; false if none does
+static bool add_hexagon(board_t* board, random_source_t* random, int empty) {
+  int first_cell = random_below(random, empty);
+  int first_value = random_below(random, NEW_HEXAGON_VALUE_COUNT);
+  for (int i = 0; i < empty; ++i) {
+    int index = nth_empty_cell(board, (first_cell + i) % empty);
+    cell_t cell = {index % board->cols, index / board->cols};
+    for (int j = 0; j < NEW_HEXAGON_VALUE_COUNT; ++j) {
+      int value = 1 << ((first_value + j) % NEW_HEXAGON_VALUE_COUNT);
+      if (gather_group(board, cell, value, MIN_GROUP_SIZE) < MIN_GROUP_SIZE) {
+        board->values[index] = value;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 int populate_board(board_t* board, random_source_t* random, int count) {
   int empty = count_cells(board, is_empty);
   int added = 0;
-  while (added < count && empty > 0) {
-    int index = nth_empty_cell(board, random_below(random, empty));
-    board->values[index] = 1 << random_below(random, NEW_HEXAGON_VALUE_COUNT);
+  while (added < count && empty > 0 && add_hexagon(board, random, empty)) {
     --empty;
     ++added;
   }

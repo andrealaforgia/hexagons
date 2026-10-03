@@ -18,9 +18,8 @@
 #define WALL_CELL (-1)
 #define MAX_NEW_HEXAGON_VALUE 8
 #define MAX_HEXAGON_VALUE 1024
-#define MIN_LINE_LENGTH 4
-// A merge is worth this many times the number, however long the lines
-#define MERGE_MULTIPLIER 4
+// How many equal hexagons must touch to merge
+#define MIN_GROUP_SIZE 4
 
 typedef struct {
   int cols;
@@ -58,6 +57,13 @@ void set_board_value(board_t* board, cell_t cell, int value);
 int board_hexagon_count(const board_t* board);
 int board_wall_count(const board_t* board);
 
+/**
+ * @brief How many hexagons carry the same number as the one on a cell and
+ * are joined to it through neighbours that do, itself included; 0 if the
+ * cell holds no hexagon
+ */
+int board_group_size(board_t* board, cell_t cell);
+
 typedef enum {
   CLICK_IGNORED,
   CLICK_SELECTED,
@@ -87,17 +93,15 @@ typedef enum {
 /**
  * @brief Apply the consequences of the last move, once it has been shown
  *
- * If the moved hexagon completed one or more straight lines of at least
- * MIN_LINE_LENGTH equal numbers, every other hexagon in those lines is
- * removed and the moved one carries MERGE_MULTIPLIER times its number. The
- * cells emptied are left in merged.
+ * If the moved hexagon now touches a group of equal numbers that makes at
+ * least MIN_GROUP_SIZE with it, whatever its shape, every other hexagon in
+ * the group is removed and the moved one carries their sum, rounded down to
+ * a power of two. The cells emptied are left in merged.
  *
- * If that number would pass MAX_HEXAGON_VALUE, every hexagon in those lines,
+ * If that number would pass MAX_HEXAGON_VALUE, every hexagon in the group,
  * the moved one included, turns to wall for good instead.
  *
- * If no line was completed, spawn_count new hexagons appear, or as many as
- * there is room for. Lines they happen to complete are left alone: only a move
- * merges.
+ * If nothing merged, spawn_count new hexagons appear, or as many as fit.
  */
 settle_result_t settle_board_move(board_t* board, random_source_t* random);
 
@@ -119,7 +123,12 @@ int initial_hexagon_count(int cell_count);
 /**
  * @brief Add hexagons on random empty cells, each carrying a random power of
  * two up to MAX_NEW_HEXAGON_VALUE
- * @return How many were added: fewer than asked when the board fills up
+ *
+ * A new hexagon never completes a group that would merge: its cell and
+ * number are chosen so that fewer than MIN_GROUP_SIZE equal numbers touch.
+ *
+ * @return How many were added: fewer than asked when the board fills up or
+ * no number fits in any empty cell
  */
 int populate_board(board_t* board, random_source_t* random, int count);
 
