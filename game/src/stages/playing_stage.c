@@ -6,12 +6,15 @@
 
 #include "board.h"
 #include "board_renderer.h"
+#include "debris.h"
+#include "debris_renderer.h"
 #include "events.h"
 #include "frame.h"
 #include "frame_limiter.h"
 #include "game.h"
 #include "game_constants.h"
 #include "graphics.h"
+#include "hex_colors.h"
 #include "hex_grid.h"
 #include "keyboard.h"
 #include "mouse.h"
@@ -31,11 +34,14 @@ playing_stage_state_ptr create_playing_stage(game_ptr game) {
   state->grid =
       create_hex_grid(state->graphics_context->screen_width, screen_height,
                       screen_height * HEX_RADIUS_SCREEN_FRACTION);
-  if (!init_board(&state->board, state->grid.cols, state->grid.rows)) {
+  int cells = hex_grid_cell_count(&state->grid);
+  if (!init_board(&state->board, state->grid.cols, state->grid.rows) ||
+      !init_debris(&state->debris, cells * DEBRIS_PIECES_PER_HEXAGON)) {
     destroy_playing_stage(state);
     return NULL;
   }
   state->random = create_random_source(game->seed);
+  state->effects_random = create_random_source(game->seed);
   populate_board(&state->board, &state->random,
                  initial_hexagon_count(hex_grid_cell_count(&state->grid)));
   return state;
@@ -44,6 +50,7 @@ playing_stage_state_ptr create_playing_stage(game_ptr game) {
 void destroy_playing_stage(playing_stage_state_ptr state) {
   if (state != NULL) {
     destroy_board(&state->board);
+    destroy_debris(&state->debris);
     free(state);
   }
 }
@@ -94,16 +101,38 @@ bool is_playing_stage_travelling(const playing_stage_state_ptr state) {
   return state->travelling;
 }
 
-void advance_playing_stage(playing_stage_state_ptr state, double delta_time) {
-  if (!state->travelling || !isfinite(delta_time) || delta_time <= 0) {
+// The hexagons a merge removed burst where they stood
+static void burst_merged_hexagons(playing_stage_state_ptr state) {
+  const board_t* board = &state->board;
+  for (int i = 0; i < board->merged_count; ++i) {
+    burst_hexagon(&state->debris, &state->effects_random,
+                  hex_cell_centre(&state->grid, board->merged[i]),
+                  state->grid.radius * HEX_DRAWN_RADIUS_FRACTION,
+                  hex_border_color(board->merged_value));
+  }
+}
+
+static void advance_travel(playing_stage_state_ptr state, double delta_time) {
+  if (!state->travelling) {
     return;
   }
   state->travel_progress += delta_time * TRAVEL_STEPS_PER_SECOND / BASELINE_FPS;
   if (state->travel_progress >= travel_steps(state)) {
     state->travel_progress = travel_steps(state);
     state->travelling = false;
-    settle_board_move(&state->board);
+    if (settle_board_move(&state->board)) {
+      burst_merged_hexagons(state);
+    }
   }
+}
+
+void advance_playing_stage(playing_stage_state_ptr state, double delta_time) {
+  if (!isfinite(delta_time) || delta_time <= 0) {
+    return;
+  }
+  advance_debris(&state->debris, delta_time,
+                 state->graphics_context->screen_height);
+  advance_travel(state, delta_time);
 }
 
 point_t travelling_hexagon_position(const playing_stage_state_ptr state) {
@@ -132,6 +161,7 @@ static void render_playing_stage(playing_stage_state_ptr state) {
                state->has_hovered_cell ? &state->hovered_cell : NULL,
                state->travelling ? &travelling : NULL,
                &state->game->number_text);
+  render_debris(state->graphics_context, &state->debris);
   render_frame(state->graphics_context);
 }
 

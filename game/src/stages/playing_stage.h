@@ -12,6 +12,7 @@
 #include <stdbool.h>
 
 #include "board.h"
+#include "debris.h"
 #include "game.h"
 #include "hex_grid.h"
 #include "random_source.h"
@@ -22,6 +23,8 @@ typedef struct {
   hex_grid_t grid;
   board_t board;
   random_source_t random;
+  debris_t debris;
+  random_source_t effects_random;  // Kept apart: effects never sway the game
   bool has_hovered_cell;
   cell_t hovered_cell;
   bool button_was_down;

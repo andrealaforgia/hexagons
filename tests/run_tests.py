@@ -46,6 +46,10 @@ TESTS = (
     "crossing",
     "settle",
     "arrival",
+    "burst",
+    "arc",
+    "debris_capacity",
+    "explosion",
 )
 
 

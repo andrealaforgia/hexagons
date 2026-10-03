@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "board.h"
+#include "debris.h"
 #include "game.h"
 #include "game_constants.h"
 #include "game_settings.h"
@@ -794,6 +795,147 @@ static void the_merge_shows_when_the_hexagon_arrives(void) {
   destroy_playing_stage(state);
 }
 
+static void a_hexagon_bursts_into_its_six_wedges(void) {
+  debris_t debris;
+  assert(init_debris(&debris, 60));
+  assert(debris_piece_count(&debris) == 0);
+  random_source_t random = create_random_source(11);
+  point_t centre = point(400, 300);
+  burst_hexagon(&debris, &random, centre, 30, 0x12AB34);
+  assert(debris_piece_count(&debris) == DEBRIS_PIECES_PER_HEXAGON);
+  // Before they move, the pieces are the hexagon cut into wedges: each one
+  // spans the centre and two neighbouring corners
+  for (int i = 0; i < DEBRIS_PIECES_PER_HEXAGON; ++i) {
+    const debris_piece_t* piece = &debris.pieces[i];
+    assert(piece->active && piece->color == 0x12AB34);
+    point_t corners[DEBRIS_PIECE_CORNERS];
+    debris_piece_corners(piece, corners);
+    point_t expected[DEBRIS_PIECE_CORNERS] = {
+        centre, hex_corner(centre, 30, i),
+        hex_corner(centre, 30, (i + 1) % HEX_CORNER_COUNT)};
+    for (int corner = 0; corner < DEBRIS_PIECE_CORNERS; ++corner) {
+      assert(exact_distance(&corners[corner], &expected[corner]) < 1e-6);
+    }
+  }
+  destroy_debris(&debris);
+  assert(outstanding_allocations() == 0);
+}
+
+static void debris_flies_up_then_falls_off_the_screen(void) {
+  debris_t debris;
+  assert(init_debris(&debris, 60));
+  random_source_t random = create_random_source(11);
+  double radius = 30, floor = 900;
+  point_t centre = point(400, 450);
+  burst_hexagon(&debris, &random, centre, radius, COLOR_RED);
+  double start[DEBRIS_PIECES_PER_HEXAGON], highest[DEBRIS_PIECES_PER_HEXAGON];
+  for (int i = 0; i < DEBRIS_PIECES_PER_HEXAGON; ++i) {
+    start[i] = highest[i] = debris.pieces[i].position.y;
+  }
+  // Time that makes no sense changes nothing
+  advance_debris(&debris, NAN, floor);
+  advance_debris(&debris, -3, floor);
+  advance_debris(&debris, 0, floor);
+  for (int i = 0; i < DEBRIS_PIECES_PER_HEXAGON; ++i) {
+    assert(debris.pieces[i].position.y == start[i]);
+  }
+
+  int frames = 0;
+  while (debris_piece_count(&debris) > 0) {
+    advance_debris(&debris, 1.0, floor);
+    ++frames;
+    for (int i = 0; i < DEBRIS_PIECES_PER_HEXAGON; ++i) {
+      const debris_piece_t* piece = &debris.pieces[i];
+      if (frames == 1) {
+        // Every piece sets off upwards: y shrinks towards the top
+        assert(piece->position.y < start[i]);
+      }
+      if (piece->active) {
+        highest[i] = fmin(highest[i], piece->position.y);
+      } else {
+        // A piece only goes once it is wholly below the screen
+        assert(piece->position.y - radius > floor);
+      }
+    }
+    // Over in a few seconds
+    assert(frames < 300);
+  }
+  for (int i = 0; i < DEBRIS_PIECES_PER_HEXAGON; ++i) {
+    // Each rose well clear of where the hexagon was
+    assert(start[i] - highest[i] > 2 * radius);
+  }
+  // And it lasts long enough to be seen
+  assert(frames > 30);
+  destroy_debris(&debris);
+}
+
+static void debris_beyond_capacity_is_dropped(void) {
+  debris_t debris;
+  assert(init_debris(&debris, 10));
+  random_source_t random = create_random_source(11);
+  burst_hexagon(&debris, &random, point(100, 100), 30, COLOR_RED);
+  burst_hexagon(&debris, &random, point(200, 100), 30, COLOR_RED);
+  burst_hexagon(&debris, &random, point(300, 100), 30, COLOR_RED);
+  assert(debris_piece_count(&debris) == 10);
+  // Once the pieces have gone there is room again
+  advance_debris(&debris, 1e9, 900);
+  assert(debris_piece_count(&debris) == 0);
+  burst_hexagon(&debris, &random, point(100, 100), 30, COLOR_RED);
+  assert(debris_piece_count(&debris) == DEBRIS_PIECES_PER_HEXAGON);
+  destroy_debris(&debris);
+
+  fail_allocation_after(0);
+  assert(!init_debris(&debris, 10));
+  fail_allocation_after(-1);
+  destroy_debris(&debris);
+  assert(outstanding_allocations() == 0);
+}
+
+static void merged_hexagons_explode(void) {
+  game_t game = test_game();
+  playing_stage_state_ptr state = create_playing_stage(&game);
+  board_t* board = &state->board;
+  for (int row = 0; row < board->rows; ++row) {
+    for (int col = 0; col < board->cols; ++col) {
+      cell_t cell = {col, row};
+      set_board_value(board, cell, EMPTY_CELL);
+    }
+  }
+  cell_t start = {5, 5}, from = {12, 10};
+  cell_t target = lay_line(board, start, 0, 3, 2);
+  set_board_value(board, from, 2);
+  click_at(state, from);
+  click_at(state, target);
+  while (is_playing_stage_travelling(state)) {
+    assert(debris_piece_count(&state->debris) == 0);
+    advance_playing_stage(state, 1.0);
+  }
+  // The three hexagons that vanished burst; the one that stays does not
+  assert(debris_piece_count(&state->debris) == 3 * DEBRIS_PIECES_PER_HEXAGON);
+  point_t target_centre = hex_cell_centre(&state->grid, target);
+  for (int i = 0; i < state->debris.capacity; ++i) {
+    const debris_piece_t* piece = &state->debris.pieces[i];
+    if (!piece->active) continue;
+    // In the colour the hexagons had, not that of their sum
+    assert(piece->color == hex_border_color(2));
+    assert(piece->position.y <= target_centre.y + state->grid.radius);
+    assert(piece->position.x < target_centre.x);
+  }
+  // The pieces keep flying while the player gets on with the game
+  click_at(state, target);
+  assert(state->board.has_selection);
+  for (int frame = 0; frame < 300; ++frame) advance_playing_stage(state, 1.0);
+  assert(debris_piece_count(&state->debris) == 0);
+
+  // A move that merges nothing bursts nothing
+  cell_t elsewhere = {2, 12};
+  click_at(state, elsewhere);
+  while (is_playing_stage_travelling(state)) advance_playing_stage(state, 1.0);
+  assert(debris_piece_count(&state->debris) == 0);
+  destroy_playing_stage(state);
+  assert(outstanding_allocations() == 0);
+}
+
 int main(int argc, char** argv) {
   assert(argc == 2);
   if (!strcmp(argv[1], "lifecycle"))
@@ -860,6 +1002,14 @@ int main(int argc, char** argv) {
     a_line_merges_only_when_a_move_completes_it();
   else if (!strcmp(argv[1], "arrival"))
     the_merge_shows_when_the_hexagon_arrives();
+  else if (!strcmp(argv[1], "burst"))
+    a_hexagon_bursts_into_its_six_wedges();
+  else if (!strcmp(argv[1], "arc"))
+    debris_flies_up_then_falls_off_the_screen();
+  else if (!strcmp(argv[1], "debris_capacity"))
+    debris_beyond_capacity_is_dropped();
+  else if (!strcmp(argv[1], "explosion"))
+    merged_hexagons_explode();
   else
     return 1;
   return 0;
