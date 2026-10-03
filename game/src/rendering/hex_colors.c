@@ -4,7 +4,11 @@
 
 #include "color.h"
 
-#define GOLDEN_ANGLE_DEGREES 137.50776405003785
+// The numbers are the powers of two from 1 to 1024
+#define NUMBER_COUNT 11
+// Hues are spread evenly round the colour wheel, and handed out this many
+// places apart so that a number and its double look nothing alike
+#define HUE_STRIDE 4
 #define BORDER_SATURATION 0.75
 // How far the selected fill moves from the border colour towards white
 #define SELECTED_FILL_WHITENESS 0.55
@@ -22,11 +26,19 @@ static color_t bright_color(double hue, double saturation) {
                (int)lround(rgb[2] * 255));
 }
 
+// Position of a number in the sequence 1, 2, 4, 8...
+static int number_index(int value) {
+  int index = 0;
+  while (value > 1) {
+    value /= 2;
+    ++index;
+  }
+  return index;
+}
+
 color_t hex_border_color(int value) {
-  // Stepping the hue by the golden angle keeps consecutive numbers, and any
-  // small set of numbers, far apart on the colour wheel
-  return bright_color(fmod(value * GOLDEN_ANGLE_DEGREES, 360),
-                      BORDER_SATURATION);
+  int place = number_index(value) * HUE_STRIDE % NUMBER_COUNT;
+  return bright_color(place * 360.0 / NUMBER_COUNT, BORDER_SATURATION);
 }
 
 static int lighten(int channel) {

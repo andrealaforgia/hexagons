@@ -8,6 +8,8 @@
 #include "random_source.h"
 
 #define INITIAL_FILL_FRACTION 0.10
+// New hexagons carry 1, 2, 4 or 8
+#define NEW_HEXAGON_VALUE_COUNT 4
 
 static int cell_count(const board_t* board) {
   return board->cols * board->rows;
@@ -215,7 +217,7 @@ int populate_board(board_t* board, random_source_t* random, int count) {
   int added = 0;
   while (added < count && empty > 0) {
     int index = nth_empty_cell(board, random_below(random, empty));
-    board->values[index] = 1 + random_below(random, MAX_NEW_HEXAGON_VALUE);
+    board->values[index] = 1 << random_below(random, NEW_HEXAGON_VALUE_COUNT);
     --empty;
     ++added;
   }

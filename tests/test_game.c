@@ -164,7 +164,7 @@ static void a_new_board_holds_a_tenth_of_its_cells(void) {
   assert(outstanding_allocations() == 0);
 }
 
-static void new_hexagons_are_numbered_from_one_to_eight(void) {
+static void new_hexagons_carry_a_power_of_two_up_to_eight(void) {
   board_t board;
   assert(init_board(&board, 40, 40));
   random_source_t random = create_random_source(7);
@@ -180,8 +180,13 @@ static void new_hexagons_are_numbered_from_one_to_eight(void) {
   }
   assert(seen[0] == 800);
   for (int value = 1; value <= MAX_NEW_HEXAGON_VALUE; ++value) {
-    // Roughly even: 100 expected of each
-    assert(seen[value] > 50 && seen[value] < 150);
+    bool power_of_two = (value & (value - 1)) == 0;
+    if (power_of_two) {
+      // 1, 2, 4 and 8, roughly evenly: 200 expected of each
+      assert(seen[value] > 150 && seen[value] < 250);
+    } else {
+      assert(seen[value] == 0);
+    }
   }
   destroy_board(&board);
 }
@@ -239,20 +244,25 @@ static void cells_outside_the_board_are_empty_and_cannot_be_set(void) {
 }
 
 static void each_number_has_its_own_border_colour(void) {
-  for (int value = 1; value <= MAX_NEW_HEXAGON_VALUE; ++value) {
+  // The numbers are the powers of two from 1 to 1024
+  for (int value = 1; value <= MAX_HEXAGON_VALUE; value *= 2) {
     assert(hex_border_color(value) == hex_border_color(value));
-    assert(hex_border_color(value) != COLOR_BLACK);
-    for (int other = value + 1; other <= MAX_NEW_HEXAGON_VALUE; ++other) {
-      color_t a = hex_border_color(value), b = hex_border_color(other);
+    color_t a = hex_border_color(value);
+    // Bright enough to see on black
+    assert(R(a) + G(a) + B(a) >= 300);
+    for (int other = value * 2; other <= MAX_HEXAGON_VALUE; other *= 2) {
+      color_t b = hex_border_color(other);
       // Tell them apart at a glance, not just by one shade
       int difference = abs(R(a) - R(b)) + abs(G(a) - G(b)) + abs(B(a) - B(b));
-      assert(difference >= 60);
+      assert(difference >= 100);
     }
-  }
-  // Sums of merges get a colour too, and bright enough to see on black
-  for (int value = 1; value <= 1024; ++value) {
-    color_t color = hex_border_color(value);
-    assert(R(color) + G(color) + B(color) >= 200);
+    if (value < MAX_HEXAGON_VALUE) {
+      // A number and its double are often side by side: far apart in hue
+      color_t next = hex_border_color(value * 2);
+      int difference =
+          abs(R(a) - R(next)) + abs(G(a) - G(next)) + abs(B(a) - B(next));
+      assert(difference >= 250);
+    }
   }
 }
 
@@ -800,7 +810,7 @@ int main(int argc, char** argv) {
   else if (!strcmp(argv[1], "population"))
     a_new_board_holds_a_tenth_of_its_cells();
   else if (!strcmp(argv[1], "values"))
-    new_hexagons_are_numbered_from_one_to_eight();
+    new_hexagons_carry_a_power_of_two_up_to_eight();
   else if (!strcmp(argv[1], "seed"))
     the_same_seed_gives_the_same_board();
   else if (!strcmp(argv[1], "full"))

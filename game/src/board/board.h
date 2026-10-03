@@ -86,7 +86,8 @@ bool settle_board_move(board_t* board);
 int initial_hexagon_count(int cell_count);
 
 /**
- * @brief Add hexagons with random numbers on random empty cells
+ * @brief Add hexagons on random empty cells, each carrying a random power of
+ * two up to MAX_NEW_HEXAGON_VALUE
  * @return How many were added: fewer than asked when the board fills up
  */
 int populate_board(board_t* board, random_source_t* random, int count);
