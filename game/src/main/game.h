@@ -22,6 +22,7 @@ typedef struct {
   graphics_context_t graphics_context;
   keyboard_state_t keyboard_state;
   mouse_state_t mouse_state;
+  unsigned seed;  // Decides how the hexagons fall
 } game_t, *game_ptr;
 
 game_t init_game(game_settings_t game_settings);

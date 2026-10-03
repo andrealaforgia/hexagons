@@ -3,16 +3,18 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include "board.h"
+#include "board_renderer.h"
 #include "events.h"
 #include "frame.h"
 #include "frame_limiter.h"
 #include "game.h"
 #include "game_constants.h"
 #include "graphics.h"
-#include "grid_renderer.h"
 #include "hex_grid.h"
 #include "keyboard.h"
 #include "mouse.h"
+#include "random_source.h"
 #include "stage.h"
 
 /* ---- ==== ---- ==== init ==== ---- ==== ---- */
@@ -28,10 +30,22 @@ playing_stage_state_ptr create_playing_stage(game_ptr game) {
   state->grid =
       create_hex_grid(state->graphics_context->screen_width, screen_height,
                       screen_height * HEX_RADIUS_SCREEN_FRACTION);
+  if (!init_board(&state->board, state->grid.cols, state->grid.rows)) {
+    destroy_playing_stage(state);
+    return NULL;
+  }
+  state->random = create_random_source(game->seed);
+  populate_board(&state->board, &state->random,
+                 initial_hexagon_count(hex_grid_cell_count(&state->grid)));
   return state;
 }
 
-void destroy_playing_stage(playing_stage_state_ptr state) { free(state); }
+void destroy_playing_stage(playing_stage_state_ptr state) {
+  if (state != NULL) {
+    destroy_board(&state->board);
+    free(state);
+  }
+}
 
 /* ---- ==== ---- ==== input ==== ---- ==== ---- */
 
@@ -63,8 +77,8 @@ static void track_mouse(playing_stage_state_ptr state) {
 
 static void render_playing_stage(playing_stage_state_ptr state) {
   clear_frame(state->graphics_context);
-  render_grid(state->graphics_context, &state->grid,
-              state->has_hovered_cell ? &state->hovered_cell : NULL);
+  render_board(state->graphics_context, &state->grid, &state->board,
+               state->has_hovered_cell ? &state->hovered_cell : NULL);
   render_frame(state->graphics_context);
 }
 

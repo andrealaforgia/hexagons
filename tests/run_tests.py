@@ -21,6 +21,13 @@ TESTS = (
     "fill",
     "outside",
     "hover",
+    "population",
+    "values",
+    "seed",
+    "full",
+    "bounds",
+    "colours",
+    "start",
 )
 
 

@@ -4,10 +4,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "board.h"
 #include "game.h"
 #include "game_settings.h"
+#include "hex_colors.h"
 #include "hex_grid.h"
 #include "playing_stage.h"
+#include "random_source.h"
 #include "stage.h"
 #include "test_allocator.h"
 
@@ -17,6 +20,7 @@ static game_t test_game(void) {
   game.graphics_context.screen_width = 1440;
   game.graphics_context.screen_height = 900;
   game.graphics_context.screen_center = point(720, 450);
+  game.seed = 1;
   return game;
 }
 
@@ -134,6 +138,128 @@ static void pointing_highlights_the_cell_under_the_mouse(void) {
   destroy_playing_stage(state);
 }
 
+static void a_new_board_holds_a_tenth_of_its_cells(void) {
+  const int sizes[][2] = {{21, 15}, {10, 10}, {7, 3}, {1, 1}};
+  for (int i = 0; i < 4; ++i) {
+    board_t board;
+    assert(init_board(&board, sizes[i][0], sizes[i][1]));
+    int cells = sizes[i][0] * sizes[i][1];
+    assert(board_hexagon_count(&board) == 0);
+    random_source_t random = create_random_source(42);
+    int expected = (int)lround(cells / 10.0);
+    assert(initial_hexagon_count(cells) == expected);
+    assert(populate_board(&board, &random, expected) == expected);
+    // Hexagons on distinct cells: the count of occupied cells is the count
+    // of hexagons placed
+    assert(board_hexagon_count(&board) == expected);
+    destroy_board(&board);
+  }
+  assert(outstanding_allocations() == 0);
+}
+
+static void new_hexagons_are_numbered_from_one_to_eight(void) {
+  board_t board;
+  assert(init_board(&board, 40, 40));
+  random_source_t random = create_random_source(7);
+  populate_board(&board, &random, 800);
+  int seen[MAX_NEW_HEXAGON_VALUE + 1] = {0};
+  for (int row = 0; row < 40; ++row) {
+    for (int col = 0; col < 40; ++col) {
+      cell_t cell = {col, row};
+      int value = board_value(&board, cell);
+      assert(value >= 0 && value <= MAX_NEW_HEXAGON_VALUE);
+      seen[value]++;
+    }
+  }
+  assert(seen[0] == 800);
+  for (int value = 1; value <= MAX_NEW_HEXAGON_VALUE; ++value) {
+    // Roughly even: 100 expected of each
+    assert(seen[value] > 50 && seen[value] < 150);
+  }
+  destroy_board(&board);
+}
+
+static bool boards_match(const board_t* a, const board_t* b) {
+  for (int row = 0; row < a->rows; ++row) {
+    for (int col = 0; col < a->cols; ++col) {
+      cell_t cell = {col, row};
+      if (board_value(a, cell) != board_value(b, cell)) return false;
+    }
+  }
+  return true;
+}
+
+static void the_same_seed_gives_the_same_board(void) {
+  board_t first, second, third;
+  assert(init_board(&first, 21, 15) && init_board(&second, 21, 15) &&
+         init_board(&third, 21, 15));
+  random_source_t a = create_random_source(1234);
+  random_source_t b = create_random_source(1234);
+  random_source_t c = create_random_source(1235);
+  populate_board(&first, &a, 32);
+  populate_board(&second, &b, 32);
+  populate_board(&third, &c, 32);
+  assert(boards_match(&first, &second));
+  assert(!boards_match(&first, &third));
+  destroy_board(&first);
+  destroy_board(&second);
+  destroy_board(&third);
+}
+
+static void populating_stops_when_the_board_is_full(void) {
+  board_t board;
+  assert(init_board(&board, 4, 3));
+  random_source_t random = create_random_source(3);
+  assert(populate_board(&board, &random, 10) == 10);
+  assert(populate_board(&board, &random, 10) == 2);
+  assert(populate_board(&board, &random, 10) == 0);
+  assert(board_hexagon_count(&board) == 12);
+  destroy_board(&board);
+}
+
+static void cells_outside_the_board_are_empty_and_cannot_be_set(void) {
+  board_t board;
+  assert(init_board(&board, 4, 3));
+  cell_t inside = {3, 2}, outside = {4, 2}, negative = {-1, 0};
+  set_board_value(&board, inside, 5);
+  set_board_value(&board, outside, 5);
+  set_board_value(&board, negative, 5);
+  assert(board_value(&board, inside) == 5);
+  assert(board_value(&board, outside) == 0);
+  assert(board_value(&board, negative) == 0);
+  assert(board_hexagon_count(&board) == 1);
+  destroy_board(&board);
+}
+
+static void each_number_has_its_own_border_colour(void) {
+  for (int value = 1; value <= MAX_NEW_HEXAGON_VALUE; ++value) {
+    assert(hex_border_color(value) == hex_border_color(value));
+    assert(hex_border_color(value) != COLOR_BLACK);
+    for (int other = value + 1; other <= MAX_NEW_HEXAGON_VALUE; ++other) {
+      color_t a = hex_border_color(value), b = hex_border_color(other);
+      // Tell them apart at a glance, not just by one shade
+      int difference = abs(R(a) - R(b)) + abs(G(a) - G(b)) + abs(B(a) - B(b));
+      assert(difference >= 60);
+    }
+  }
+  // Sums of merges get a colour too, and bright enough to see on black
+  for (int value = 1; value <= 1024; ++value) {
+    color_t color = hex_border_color(value);
+    assert(R(color) + G(color) + B(color) >= 200);
+  }
+}
+
+static void the_game_starts_with_a_tenth_of_the_cells_filled(void) {
+  game_t game = test_game();
+  playing_stage_state_ptr state = create_playing_stage(&game);
+  int cells = hex_grid_cell_count(&state->grid);
+  assert(state->board.cols == state->grid.cols);
+  assert(state->board.rows == state->grid.rows);
+  assert(board_hexagon_count(&state->board) == (int)lround(cells / 10.0));
+  destroy_playing_stage(state);
+  assert(outstanding_allocations() == 0);
+}
+
 int main(int argc, char** argv) {
   assert(argc == 2);
   if (!strcmp(argv[1], "lifecycle"))
@@ -150,6 +276,20 @@ int main(int argc, char** argv) {
     points_outside_every_hexagon_belong_to_no_cell();
   else if (!strcmp(argv[1], "hover"))
     pointing_highlights_the_cell_under_the_mouse();
+  else if (!strcmp(argv[1], "population"))
+    a_new_board_holds_a_tenth_of_its_cells();
+  else if (!strcmp(argv[1], "values"))
+    new_hexagons_are_numbered_from_one_to_eight();
+  else if (!strcmp(argv[1], "seed"))
+    the_same_seed_gives_the_same_board();
+  else if (!strcmp(argv[1], "full"))
+    populating_stops_when_the_board_is_full();
+  else if (!strcmp(argv[1], "bounds"))
+    cells_outside_the_board_are_empty_and_cannot_be_set();
+  else if (!strcmp(argv[1], "colours"))
+    each_number_has_its_own_border_colour();
+  else if (!strcmp(argv[1], "start"))
+    the_game_starts_with_a_tenth_of_the_cells_filled();
   else
     return 1;
   return 0;

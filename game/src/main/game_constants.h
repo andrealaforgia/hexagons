@@ -12,6 +12,14 @@
 // Hexagons are drawn slightly smaller than their cell to leave a gap
 #define HEX_DRAWN_RADIUS_FRACTION 0.9
 
+// The coloured border takes this fraction of the drawn radius
+#define HEX_BORDER_THICKNESS_FRACTION 0.2
+
+// The number fits in a box of these fractions of the hexagon's inner radius
+#define HEX_NUMBER_WIDTH_FRACTION 1.3
+#define HEX_NUMBER_HEIGHT_FRACTION 0.9
+
+#define HEX_FILL_COLOR 0x000000
 #define EMPTY_CELL_BORDER_COLOR 0x303030
 #define HOVERED_CELL_BORDER_COLOR 0xA0A0A0
 #define HOVERED_CELL_FILL_COLOR 0x202020

@@ -24,11 +24,11 @@ Work: axial hex coordinates, grid dimensions derived from screen size and hex ra
 First test: pixel to cell of a cell's own centre returns that cell, for every cell in the grid.
 Engine: the mouse module already exists (position and button state). Check it is enough before adding anything.
 
-### 2. Hexagons on the board
+### 2. Hexagons on the board (done)
 Usable: 10% of the cells hold a hexagon with a thick coloured border, black fill and its number at the centre.
 Work: cell states (empty, hexagon with value and colour), initial population from the seeded random source, number rendering.
 First test: a new board of N cells holds exactly round(N / 10) hexagons, all on distinct cells.
-Decision needed: which values spawn (see open decisions).
+Decided: new hexagons carry a random number from 1 to 8, and the border colour is set by the number.
 
 ### 3. Selection
 Usable: click a hexagon to select it, its fill turns to a light tone of its border; click it again to unselect; click another hexagon to move the selection.
@@ -73,7 +73,7 @@ First test: the bobbing offset stays within its amplitude for any time value.
 
 Each one blocks the iteration named, not the ones before it.
 
-1. Spawn values (iteration 2). Proposal: every new hexagon is a 1. Sums then grow naturally and odd values such as 5 can appear when five line up.
+1. Spawn values (iteration 2). Decided by Andrea: every new hexagon is a random number from 1 to 8. Each number has its own border colour, which replaces the random colouring in the spec.
 2. Crossing lines (iteration 5). Proposal: every qualifying line through the destination merges at once and the sum covers all of them, counting the moved hexagon once.
 3. No automatic merges after a spawn (iteration 6). Proposal: lines formed by spawning are left alone; only the player's move is checked.
 4. Wall rule (iteration 7). Proposal: every hexagon in the line becomes wall.

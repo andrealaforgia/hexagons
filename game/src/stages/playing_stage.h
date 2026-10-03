@@ -11,13 +11,17 @@
 
 #include <stdbool.h>
 
+#include "board.h"
 #include "game.h"
 #include "hex_grid.h"
+#include "random_source.h"
 
 typedef struct {
   game_ptr game;
   graphics_context_ptr graphics_context;
   hex_grid_t grid;
+  board_t board;
+  random_source_t random;
   bool has_hovered_cell;
   cell_t hovered_cell;
 } playing_stage_state_t;
