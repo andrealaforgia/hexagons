@@ -28,8 +28,10 @@ typedef struct {
   bool has_hovered_cell;
   cell_t hovered_cell;
   bool button_was_down;
-  bool travelling;         // A moved hexagon is on its way along board.path
-  double travel_progress;  // In steps along the path
+  bool travelling;           // A moved hexagon is on its way along board.path
+  double travel_progress;    // In steps along the path
+  bool game_over;            // No hexagon can move
+  double game_over_seconds;  // Since the game ended
 } playing_stage_state_t;
 
 typedef playing_stage_state_t* playing_stage_state_ptr;
@@ -58,6 +60,12 @@ bool is_playing_stage_travelling(const playing_stage_state_ptr state);
 
 /** @brief Where on screen the last moved hexagon is */
 point_t travelling_hexagon_position(const playing_stage_state_ptr state);
+
+/** @brief Whether the game has ended: no hexagon can move */
+bool is_playing_stage_over(const playing_stage_state_ptr state);
+
+/** @brief Deal a new board and start again */
+void restart_playing_stage(playing_stage_state_ptr state);
 
 game_stage_action_t handle_playing_stage(playing_stage_state_ptr state);
 

@@ -59,6 +59,10 @@ TESTS = (
     "wall_blocks",
     "wall_inert",
     "wall_quiet",
+    "no_move",
+    "game_over",
+    "new_game",
+    "flash",
 )
 
 

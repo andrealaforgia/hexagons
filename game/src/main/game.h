@@ -10,6 +10,7 @@
 #ifndef GAME_SRC_MAIN_GAME_H_
 #define GAME_SRC_MAIN_GAME_H_
 
+#include "game_over_renderer.h"
 #include "game_settings.h"
 #include "graphics.h"
 #include "keyboard.h"
@@ -25,6 +26,7 @@ typedef struct {
   mouse_state_t mouse_state;
   unsigned seed;  // Decides how the hexagons fall
   number_text_t number_text;
+  game_over_text_t game_over_text;
 } game_t, *game_ptr;
 
 game_t init_game(game_settings_t game_settings);

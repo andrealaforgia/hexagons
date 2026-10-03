@@ -220,6 +220,33 @@ click_result_t click_board_cell(board_t* board, cell_t cell) {
   return CLICK_SELECTED;
 }
 
+bool board_has_move(const board_t* board) {
+  for (int index = 0; index < cell_count(board); ++index) {
+    if (!is_hexagon(board->values[index])) {
+      continue;
+    }
+    cell_t cell = {index % board->cols, index / board->cols};
+    for (int direction = 0; direction < HEX_DIRECTION_COUNT; ++direction) {
+      cell_t neighbour = hex_neighbour(cell, direction);
+      if (contains(board, neighbour) &&
+          board_value(board, neighbour) == EMPTY_CELL) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+void reset_board(board_t* board) {
+  for (int i = 0; i < cell_count(board); ++i) {
+    board->values[i] = EMPTY_CELL;
+  }
+  board->has_selection = false;
+  board->move_pending = false;
+  board->path_length = 0;
+  board->merged_count = 0;
+}
+
 int spawn_hexagon_count(int cells) {
   int count = (int)lround(cells * SPAWN_FRACTION);
   return count < 1 ? 1 : count;

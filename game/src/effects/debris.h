@@ -56,6 +56,9 @@ void advance_debris(debris_t* debris, double delta_time, double floor_y);
 
 int debris_piece_count(const debris_t* debris);
 
+/** @brief Discard every piece */
+void clear_debris(debris_t* debris);
+
 /** @brief Where on screen the three corners of a piece are */
 void debris_piece_corners(const debris_piece_t* piece,
                           point_t corners[DEBRIS_PIECE_CORNERS]);

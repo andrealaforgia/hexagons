@@ -101,6 +101,16 @@ typedef enum {
  */
 settle_result_t settle_board_move(board_t* board, random_source_t* random);
 
+/**
+ * @brief Whether any hexagon has an empty cell next to it to move to
+ *
+ * When none has, the game is over.
+ */
+bool board_has_move(const board_t* board);
+
+/** @brief Empty the board for a new game */
+void reset_board(board_t* board);
+
 /** @brief How many hexagons appear after a move that merges nothing */
 int spawn_hexagon_count(int cell_count);
 

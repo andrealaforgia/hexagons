@@ -9,6 +9,7 @@
 #include "debris.h"
 #include "game.h"
 #include "game_constants.h"
+#include "game_over_effects.h"
 #include "game_settings.h"
 #include "hex_colors.h"
 #include "hex_grid.h"
@@ -1158,6 +1159,140 @@ static void a_line_turned_to_wall_does_not_explode(void) {
   destroy_playing_stage(state);
 }
 
+// Fill every cell with numbers that never line up four equal
+static void fill_board(board_t* board) {
+  for (int row = 0; row < board->rows; ++row) {
+    for (int col = 0; col < board->cols; ++col) {
+      cell_t cell = {col, row};
+      set_board_value(board, cell, 16 << ((col + row * 2) % 3));
+    }
+  }
+}
+
+static void the_game_is_over_when_no_hexagon_can_move(void) {
+  board_t board;
+  assert(init_board(&board, 8, 6));
+  // An empty board has nothing to move
+  assert(!board_has_move(&board));
+  cell_t lone = {3, 3};
+  set_board_value(&board, lone, 2);
+  assert(board_has_move(&board));
+
+  fill_board(&board);
+  assert(!board_has_move(&board));
+  // One empty cell is enough: its neighbours can move into it
+  cell_t gap = {4, 2};
+  set_board_value(&board, gap, EMPTY_CELL);
+  assert(board_has_move(&board));
+
+  // Unless only walls surround it: then nothing can reach it
+  for (int direction = 0; direction < HEX_DIRECTION_COUNT; ++direction) {
+    set_board_value(&board, hex_neighbour(gap, direction), WALL_CELL);
+  }
+  assert(!board_has_move(&board));
+  // A gap in a corner counts as much as one in the middle
+  cell_t corner = {7, 5};
+  set_board_value(&board, corner, EMPTY_CELL);
+  assert(board_has_move(&board));
+  destroy_board(&board);
+}
+
+// Leave the board full but for one move, which fills it
+static cell_t prepare_last_move(playing_stage_state_ptr state, cell_t* from) {
+  fill_board(&state->board);
+  cell_t mover = {2, 2}, target = {3, 2};
+  set_board_value(&state->board, mover, 1024);
+  set_board_value(&state->board, target, EMPTY_CELL);
+  *from = mover;
+  return target;
+}
+
+static void the_last_move_ends_the_game_and_space_restarts_it(void) {
+  game_t game = test_game();
+  playing_stage_state_ptr state = create_playing_stage(&game);
+  assert(!is_playing_stage_over(state));
+  cell_t from;
+  cell_t target = prepare_last_move(state, &from);
+  click_at(state, from);
+  click_at(state, target);
+  // Not over until the hexagon has arrived and the new ones have filled
+  // the cell it left
+  assert(!is_playing_stage_over(state));
+  while (is_playing_stage_travelling(state)) advance_playing_stage(state, 1.0);
+  int cells = hex_grid_cell_count(&state->grid);
+  assert(board_hexagon_count(&state->board) == cells);
+  assert(is_playing_stage_over(state));
+
+  // Clicks do nothing once the game is over
+  click_at(state, target);
+  assert(!state->board.has_selection);
+
+  // The clock for the game over display runs from the end of the game
+  assert(state->game_over_seconds == 0);
+  advance_playing_stage(state, 30.0);
+  assert(fabs(state->game_over_seconds - 0.5) < 1e-9);
+
+  restart_playing_stage(state);
+  assert(!is_playing_stage_over(state));
+  assert(state->game_over_seconds == 0);
+  assert(board_hexagon_count(&state->board) == initial_hexagon_count(cells));
+  assert(board_wall_count(&state->board) == 0);
+  assert(!state->board.has_selection);
+  assert(debris_piece_count(&state->debris) == 0);
+  // And the new game can be played
+  cell_t hexagon = first_hexagon(&state->board);
+  click_at(state, hexagon);
+  assert(state->board.has_selection);
+  destroy_playing_stage(state);
+  assert(outstanding_allocations() == 0);
+}
+
+static void each_new_game_deals_a_different_board(void) {
+  game_t game = test_game();
+  playing_stage_state_ptr state = create_playing_stage(&game);
+  board_t first;
+  assert(init_board(&first, state->board.cols, state->board.rows));
+  for (int row = 0; row < first.rows; ++row) {
+    for (int col = 0; col < first.cols; ++col) {
+      cell_t cell = {col, row};
+      set_board_value(&first, cell, board_value(&state->board, cell));
+    }
+  }
+  restart_playing_stage(state);
+  assert(!boards_match(&first, &state->board));
+  destroy_board(&first);
+  destroy_playing_stage(state);
+}
+
+static void game_over_flashes_and_its_prompt_bobs_gently(void) {
+  // The title is shown at once, then goes on and off at a steady beat
+  assert(is_game_over_title_shown(0));
+  int shown = 0, changes = 0;
+  bool previous = true;
+  for (int ms = 0; ms < 10000; ++ms) {
+    bool now = is_game_over_title_shown(ms / 1000.0);
+    shown += now;
+    changes += now != previous;
+    previous = now;
+  }
+  // On more than off, and between one and three flashes a second
+  assert(shown > 5000 && shown < 8000);
+  assert(changes >= 20 && changes <= 60);
+
+  // The prompt drifts up and down around its place, never jumping
+  double amplitude = 6, lowest = 0, highest = 0;
+  for (int frame = 0; frame < 600; ++frame) {
+    double offset = game_over_prompt_offset(frame / 60.0, amplitude);
+    double next = game_over_prompt_offset((frame + 1) / 60.0, amplitude);
+    assert(fabs(offset) <= amplitude + 1e-9);
+    assert(fabs(next - offset) < amplitude * 0.1);
+    lowest = fmin(lowest, offset);
+    highest = fmax(highest, offset);
+  }
+  assert(highest > amplitude * 0.95 && lowest < -amplitude * 0.95);
+  assert(game_over_prompt_offset(0, amplitude) == 0);
+}
+
 int main(int argc, char** argv) {
   assert(argc == 2);
   if (!strcmp(argv[1], "lifecycle"))
@@ -1250,6 +1385,14 @@ int main(int argc, char** argv) {
     walls_take_no_part_in_lines_or_new_hexagons();
   else if (!strcmp(argv[1], "wall_quiet"))
     a_line_turned_to_wall_does_not_explode();
+  else if (!strcmp(argv[1], "no_move"))
+    the_game_is_over_when_no_hexagon_can_move();
+  else if (!strcmp(argv[1], "game_over"))
+    the_last_move_ends_the_game_and_space_restarts_it();
+  else if (!strcmp(argv[1], "new_game"))
+    each_new_game_deals_a_different_board();
+  else if (!strcmp(argv[1], "flash"))
+    game_over_flashes_and_its_prompt_bobs_gently();
   else
     return 1;
   return 0;

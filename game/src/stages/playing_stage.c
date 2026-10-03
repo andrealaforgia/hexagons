@@ -13,6 +13,7 @@
 #include "frame_limiter.h"
 #include "game.h"
 #include "game_constants.h"
+#include "game_over_renderer.h"
 #include "graphics.h"
 #include "hex_colors.h"
 #include "hex_grid.h"
@@ -42,9 +43,22 @@ playing_stage_state_ptr create_playing_stage(game_ptr game) {
   }
   state->random = create_random_source(game->seed);
   state->effects_random = create_random_source(game->seed);
+  restart_playing_stage(state);
+  return state;
+}
+
+void restart_playing_stage(playing_stage_state_ptr state) {
+  reset_board(&state->board);
+  clear_debris(&state->debris);
   populate_board(&state->board, &state->random,
                  initial_hexagon_count(hex_grid_cell_count(&state->grid)));
-  return state;
+  state->travelling = false;
+  state->game_over = !board_has_move(&state->board);
+  state->game_over_seconds = 0;
+}
+
+bool is_playing_stage_over(const playing_stage_state_ptr state) {
+  return state->game_over;
 }
 
 void destroy_playing_stage(playing_stage_state_ptr state) {
@@ -63,7 +77,8 @@ void move_playing_stage_pointer(playing_stage_state_ptr state, double x,
       hex_cell_at(&state->grid, x, y, &state->hovered_cell);
   bool clicked = button_down && !state->button_was_down;
   state->button_was_down = button_down;
-  if (clicked && state->has_hovered_cell && !state->travelling) {
+  if (clicked && state->has_hovered_cell && !state->travelling &&
+      !state->game_over) {
     if (click_board_cell(&state->board, state->hovered_cell) == CLICK_MOVED) {
       state->travelling = true;
       state->travel_progress = 0;
@@ -123,12 +138,16 @@ static void advance_travel(playing_stage_state_ptr state, double delta_time) {
     if (settle_board_move(&state->board, &state->random) == SETTLED_MERGE) {
       burst_merged_hexagons(state);
     }
+    state->game_over = !board_has_move(&state->board);
   }
 }
 
 void advance_playing_stage(playing_stage_state_ptr state, double delta_time) {
   if (!isfinite(delta_time) || delta_time <= 0) {
     return;
+  }
+  if (state->game_over) {
+    state->game_over_seconds += delta_time / BASELINE_FPS;
   }
   advance_debris(&state->debris, delta_time,
                  state->graphics_context->screen_height);
@@ -162,6 +181,10 @@ static void render_playing_stage(playing_stage_state_ptr state) {
                state->travelling ? &travelling : NULL,
                &state->game->number_text);
   render_debris(state->graphics_context, &state->debris);
+  if (state->game_over) {
+    render_game_over(state->graphics_context, &state->game->game_over_text,
+                     state->game_over_seconds);
+  }
   render_frame(state->graphics_context);
 }
 
@@ -178,6 +201,9 @@ game_stage_action_t handle_playing_stage(playing_stage_state_ptr state) {
     }
     if (is_f11_key_pressed(keyboard)) {
       toggle_fullscreen(state->graphics_context);
+    }
+    if (state->game_over && is_space_key_pressed(keyboard)) {
+      restart_playing_stage(state);
     }
     track_mouse(state);
     advance_playing_stage(state, delta_time);

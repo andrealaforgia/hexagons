@@ -58,7 +58,7 @@ Work: wall cell state, pathfinding treats walls as blocked, wall rendering.
 First test: four 512s in a line produce wall and no 2048.
 Decision needed: which cells become wall (see open decisions).
 
-### 8. Start, end and score
+### 8. Start, end and score (game over and restart done; intro and score not started)
 Usable: intro screen, play, game over when no move is possible, score shown, restart without relaunching.
 Work: intro and game over stages as in asteroids, game over detection, score.
 First test: a board with no empty cell reports game over.

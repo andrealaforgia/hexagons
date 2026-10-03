@@ -7,27 +7,18 @@
 
 #include "board.h"
 #include "color.h"
+#include "game_font.h"
 #include "ttf_text.h"
 
-#define NUMBER_FONT_PATH "game/assets/fonts/PressStart2P.ttf"
-
-// The font is drawn on a grid of this many pixels and is only crisp, and
-// only exactly square, at multiples of it
-#define FONT_PIXEL_GRID 8
-
 int number_font_size(int digits, double box_width, double box_height) {
-  int size = (int)floor(fmin(box_width / digits, box_height));
-  if (size >= FONT_PIXEL_GRID) {
-    return size - size % FONT_PIXEL_GRID;
-  }
-  return size < 1 ? 1 : size;
+  return crisp_font_size((int)floor(fmin(box_width / digits, box_height)));
 }
 
 number_text_t load_number_text(double box_width, double box_height) {
   number_text_t numbers = {0};
   for (int digits = 1; digits <= MAX_NUMBER_DIGITS; ++digits) {
     numbers.fonts[digits - 1] = load_ttf_font(
-        NUMBER_FONT_PATH, number_font_size(digits, box_width, box_height));
+        GAME_FONT_PATH, number_font_size(digits, box_width, box_height));
   }
   return numbers;
 }

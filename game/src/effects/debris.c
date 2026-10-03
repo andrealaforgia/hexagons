@@ -113,6 +113,12 @@ int debris_piece_count(const debris_t* debris) {
   return count;
 }
 
+void clear_debris(debris_t* debris) {
+  for (int i = 0; i < debris->capacity; ++i) {
+    debris->pieces[i].active = false;
+  }
+}
+
 void debris_piece_corners(const debris_piece_t* piece,
                           point_t corners[DEBRIS_PIECE_CORNERS]) {
   wedge_corners(piece->radius, piece->wedge, corners);
