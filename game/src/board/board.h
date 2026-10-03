@@ -18,9 +18,10 @@
 #define WALL_CELL (-1)
 #define MAX_NEW_HEXAGON_VALUE 8
 #define MAX_HEXAGON_VALUE 1024
-// How many equal hexagons must touch to merge, on a board of ordinary size
-// or smaller; see min_group_size_for
-#define MIN_GROUP_SIZE 6
+// How many equal hexagons must touch to merge: from the first on a board of
+// ordinary size to the second on the biggest; see min_group_size_for
+#define MIN_GROUP_SIZE 4
+#define MAX_GROUP_SIZE 16
 
 typedef struct {
   int cols;
@@ -120,10 +121,9 @@ void reset_board(board_t* board);
 /**
  * @brief How many equal hexagons must touch to merge on a board of this size
  *
- * MIN_GROUP_SIZE up to about 300 cells, then growing with the width of the
- * board rather than its area: MIN_GROUP_SIZE * sqrt(cells / 300), rounded to
- * the nearest even number. A board with four times the cells needs groups
- * twice as big.
+ * MIN_GROUP_SIZE below 600 cells, twice that below 2400, and so on up to
+ * MAX_GROUP_SIZE: the group doubles each time the board doubles in width,
+ * which is four times the cells. Screens today get about 300 cells.
  */
 int min_group_size_for(int cell_count);
 

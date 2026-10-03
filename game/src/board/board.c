@@ -9,8 +9,9 @@
 
 #define INITIAL_FILL_FRACTION 0.10
 #define SPAWN_FRACTION 0.01
-// The board on which MIN_GROUP_SIZE hexagons make a group
-#define ORDINARY_CELL_COUNT 300.0
+// The smallest board that asks for more than MIN_GROUP_SIZE in a group:
+// twice the cells of an ordinary one
+#define FIRST_BIGGER_GROUP_CELL_COUNT 600
 // New hexagons carry 1, 2, 4 or 8
 #define NEW_HEXAGON_VALUE_COUNT 4
 
@@ -273,10 +274,13 @@ void reset_board(board_t* board) {
 }
 
 int min_group_size_for(int cells) {
-  // Halved, rounded and doubled: the nearest even number
-  int size =
-      2 * (int)lround(MIN_GROUP_SIZE * sqrt(cells / ORDINARY_CELL_COUNT) / 2);
-  return size < MIN_GROUP_SIZE ? MIN_GROUP_SIZE : size;
+  int size = MIN_GROUP_SIZE;
+  int next_step = FIRST_BIGGER_GROUP_CELL_COUNT;
+  while (cells >= next_step && size < MAX_GROUP_SIZE) {
+    size *= 2;
+    next_step *= 4;
+  }
+  return size;
 }
 
 int spawn_hexagon_count(int cells) {

@@ -1105,25 +1105,23 @@ static void a_dealt_board_has_no_group_ready_to_merge(void) {
 }
 
 static void bigger_boards_need_bigger_groups(void) {
-  // Six on the board every screen gets today, about 300 cells
-  assert(MIN_GROUP_SIZE == 6);
-  assert(min_group_size_for(300) == 6);
-  assert(min_group_size_for(315) == 6);
-  assert(min_group_size_for(360) == 6);
-  // Never fewer, however small the board
-  assert(min_group_size_for(1) == 6);
-  assert(min_group_size_for(100) == 6);
-  // Growing with the width of the board, not its area: four times the
-  // cells doubles the group
-  assert(min_group_size_for(480) == 8);
+  // Four on the board every screen gets today, about 300 cells
+  assert(min_group_size_for(1) == 4);
+  assert(min_group_size_for(300) == 4);
+  assert(min_group_size_for(315) == 4);
+  assert(min_group_size_for(599) == 4);
+  // Doubling each time the board doubles in width, which is four times
+  // the cells
   assert(min_group_size_for(600) == 8);
-  assert(min_group_size_for(675) == 10);
-  assert(min_group_size_for(1200) == 12);
-  assert(min_group_size_for(4800) == 24);
-  for (int cells = 1; cells < 5000; ++cells) {
-    assert(min_group_size_for(cells + 1) >= min_group_size_for(cells));
-    // Always an even number
-    assert(min_group_size_for(cells) % 2 == 0);
+  assert(min_group_size_for(2399) == 8);
+  assert(min_group_size_for(2400) == 16);
+  // And never more than sixteen
+  assert(min_group_size_for(9600) == 16);
+  assert(min_group_size_for(1000000) == 16);
+  for (int cells = 1; cells < 20000; ++cells) {
+    int size = min_group_size_for(cells);
+    assert(size == 4 || size == 8 || size == 16);
+    assert(min_group_size_for(cells + 1) >= size);
   }
 
   // On a board of 600 cells seven in touch do nothing and eight merge
