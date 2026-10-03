@@ -9,6 +9,12 @@
 // The hexagon radius is this fraction of the screen height
 #define HEX_RADIUS_SCREEN_FRACTION (1.0 / 24.0)
 
+// How fast a moved hexagon travels, in cells
+#define TRAVEL_STEPS_PER_SECOND 25.0
+
+// Frame times are expressed in frames at this rate
+#define BASELINE_FPS 60.0
+
 // Hexagons are drawn slightly smaller than their cell to leave a gap
 #define HEX_DRAWN_RADIUS_FRACTION 0.9
 

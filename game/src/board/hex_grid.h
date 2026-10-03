@@ -15,6 +15,7 @@
 #include "geometry.h"
 
 #define HEX_CORNER_COUNT 6
+#define HEX_DIRECTION_COUNT 6
 
 typedef struct {
   int col;
@@ -39,6 +40,18 @@ int hex_grid_cell_count(const hex_grid_t* grid);
 bool hex_grid_contains(const hex_grid_t* grid, cell_t cell);
 
 point_t hex_cell_centre(const hex_grid_t* grid, cell_t cell);
+
+/**
+ * @brief The adjacent cell in one of the six directions
+ *
+ * Directions run clockwise on screen from the right: east, south-east,
+ * south-west, west, north-west, north-east. Direction d + 3 is the opposite
+ * of d. The cell returned may lie outside any grid.
+ */
+cell_t hex_neighbour(cell_t cell, int direction);
+
+/** @brief Number of steps between two cells when nothing is in the way */
+int hex_distance(cell_t a, cell_t b);
 
 /**
  * @brief Corner of a hexagon, counted clockwise on screen from the top right

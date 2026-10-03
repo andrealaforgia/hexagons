@@ -10,14 +10,23 @@
 #include "graphics.h"
 #include "hex_grid.h"
 
+// A hexagon on its way to the cell it was moved to
+typedef struct {
+  cell_t destination;
+  point_t position;  // Where it is on screen right now
+} travelling_hexagon_t;
+
 /**
  * @brief Draw every cell: an outline when empty, a numbered hexagon otherwise
  *
  * The selected hexagon is filled with a light tone of its border colour.
  * @param hovered Cell to highlight, or NULL for none
+ * @param travelling Hexagon to draw on its way rather than on its cell, or
+ * NULL for none
  */
 void render_board(const graphics_context_ptr graphics_context,
                   const hex_grid_t* grid, const board_t* board,
-                  const cell_t* hovered);
+                  const cell_t* hovered,
+                  const travelling_hexagon_t* travelling);
 
 #endif  // GAME_SRC_RENDERING_BOARD_RENDERER_H_

@@ -89,14 +89,17 @@ static void render_hexagon(const graphics_context_ptr graphics_context,
 
 void render_board(const graphics_context_ptr graphics_context,
                   const hex_grid_t* grid, const board_t* board,
-                  const cell_t* hovered) {
+                  const cell_t* hovered,
+                  const travelling_hexagon_t* travelling) {
   double radius = grid->radius * HEX_DRAWN_RADIUS_FRACTION;
   for (int row = 0; row < grid->rows; ++row) {
     for (int col = 0; col < grid->cols; ++col) {
       cell_t cell = {col, row};
       point_t centre = hex_cell_centre(grid, cell);
       int value = board_value(board, cell);
-      if (value == EMPTY_CELL) {
+      bool on_its_way = travelling && travelling->destination.col == col &&
+                        travelling->destination.row == row;
+      if (value == EMPTY_CELL || on_its_way) {
         bool is_hovered = hovered && hovered->col == col && hovered->row == row;
         render_empty_cell(graphics_context, centre, radius, is_hovered);
       } else {
@@ -105,5 +108,10 @@ void render_board(const graphics_context_ptr graphics_context,
         render_hexagon(graphics_context, centre, radius, value, selected);
       }
     }
+  }
+  if (travelling) {
+    // Drawn last so that it passes over the cells on its way
+    render_hexagon(graphics_context, travelling->position, radius,
+                   board_value(board, travelling->destination), false);
   }
 }

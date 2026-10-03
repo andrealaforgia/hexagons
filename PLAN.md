@@ -35,7 +35,7 @@ Usable: click a hexagon to select it, its fill turns to a light tone of its bord
 Work: selection state on the board, click edge detection (a press is one click, not one per frame), light tone colour function.
 First test: selecting the selected cell clears the selection.
 
-### 4. Movement
+### 4. Movement (done)
 Usable: with a hexagon selected, click an empty cell and the hexagon goes there if a path exists; otherwise nothing happens.
 Work: breadth-first search over the six neighbours through empty cells only, move applied to the board, then animation of the hexagon along the returned path.
 First test: the path between two cells on an empty board has length equal to their hex distance. Second: a hexagon enclosed by others has no path.

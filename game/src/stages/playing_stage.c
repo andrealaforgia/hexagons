@@ -1,5 +1,6 @@
 #include "playing_stage.h"
 
+#include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
 
@@ -55,8 +56,11 @@ void move_playing_stage_pointer(playing_stage_state_ptr state, double x,
       hex_cell_at(&state->grid, x, y, &state->hovered_cell);
   bool clicked = button_down && !state->button_was_down;
   state->button_was_down = button_down;
-  if (clicked && state->has_hovered_cell) {
-    click_board_cell(&state->board, state->hovered_cell);
+  if (clicked && state->has_hovered_cell && !state->travelling) {
+    if (click_board_cell(&state->board, state->hovered_cell) == CLICK_MOVED) {
+      state->travelling = true;
+      state->travel_progress = 0;
+    }
   }
 }
 
@@ -80,19 +84,59 @@ static void track_mouse(playing_stage_state_ptr state) {
       is_mouse_left_button_pressed(mouse));
 }
 
+/* ---- ==== ---- ==== travel ==== ---- ==== ---- */
+
+static int travel_steps(const playing_stage_state_ptr state) {
+  return state->board.path_length - 1;
+}
+
+bool is_playing_stage_travelling(const playing_stage_state_ptr state) {
+  return state->travelling;
+}
+
+void advance_playing_stage(playing_stage_state_ptr state, double delta_time) {
+  if (!state->travelling || !isfinite(delta_time) || delta_time <= 0) {
+    return;
+  }
+  state->travel_progress += delta_time * TRAVEL_STEPS_PER_SECOND / BASELINE_FPS;
+  if (state->travel_progress >= travel_steps(state)) {
+    state->travel_progress = travel_steps(state);
+    state->travelling = false;
+  }
+}
+
+point_t travelling_hexagon_position(const playing_stage_state_ptr state) {
+  const board_t* board = &state->board;
+  int step = (int)floor(state->travel_progress);
+  if (step >= travel_steps(state)) {
+    return hex_cell_centre(&state->grid, board->path[travel_steps(state)]);
+  }
+  double fraction = state->travel_progress - step;
+  point_t from = hex_cell_centre(&state->grid, board->path[step]);
+  point_t to = hex_cell_centre(&state->grid, board->path[step + 1]);
+  return point(from.x + (to.x - from.x) * fraction,
+               from.y + (to.y - from.y) * fraction);
+}
+
 /* ---- ==== ---- ==== main game loop ==== ---- ==== ---- */
 
 static void render_playing_stage(playing_stage_state_ptr state) {
   clear_frame(state->graphics_context);
+  travelling_hexagon_t travelling;
+  if (state->travelling) {
+    travelling.destination = state->board.path[travel_steps(state)];
+    travelling.position = travelling_hexagon_position(state);
+  }
   render_board(state->graphics_context, &state->grid, &state->board,
-               state->has_hovered_cell ? &state->hovered_cell : NULL);
+               state->has_hovered_cell ? &state->hovered_cell : NULL,
+               state->travelling ? &travelling : NULL);
   render_frame(state->graphics_context);
 }
 
 game_stage_action_t handle_playing_stage(playing_stage_state_ptr state) {
   frame_limiter_t limiter = create_frame_limiter(state->game->settings.fps);
   while (true) {
-    frame_limiter_wait(&limiter);
+    double delta_time = frame_limiter_wait(&limiter);
     if (drain_events() == QUIT_EVENT) {
       return QUIT;
     }
@@ -104,6 +148,7 @@ game_stage_action_t handle_playing_stage(playing_stage_state_ptr state) {
       toggle_fullscreen(state->graphics_context);
     }
     track_mouse(state);
+    advance_playing_stage(state, delta_time);
     render_playing_stage(state);
   }
 }

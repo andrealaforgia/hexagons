@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
 #include "geometry.h"
 
@@ -77,4 +78,27 @@ bool hex_cell_at(const hex_grid_t* grid, double x, double y, cell_t* cell) {
   }
   *cell = found;
   return true;
+}
+
+cell_t hex_neighbour(cell_t cell, int direction) {
+  static const cell_t even_row_steps[HEX_DIRECTION_COUNT] = {
+      {1, 0}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}};
+  static const cell_t odd_row_steps[HEX_DIRECTION_COUNT] = {
+      {1, 0}, {1, 1}, {0, 1}, {-1, 0}, {0, -1}, {1, -1}};
+  const cell_t* steps = (cell.row & 1) ? odd_row_steps : even_row_steps;
+  cell_t neighbour = {cell.col + steps[direction].col,
+                      cell.row + steps[direction].row};
+  return neighbour;
+}
+
+// Column along the axis that runs down and to the right, which unlike the
+// offset column does not zigzag from row to row
+static int axial_column(cell_t cell) {
+  return cell.col - (cell.row - (cell.row & 1)) / 2;
+}
+
+int hex_distance(cell_t a, cell_t b) {
+  int dq = axial_column(a) - axial_column(b);
+  int dr = a.row - b.row;
+  return (abs(dq) + abs(dr) + abs(dq + dr)) / 2;
 }

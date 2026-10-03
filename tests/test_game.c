@@ -6,6 +6,7 @@
 
 #include "board.h"
 #include "game.h"
+#include "game_constants.h"
 #include "game_settings.h"
 #include "hex_colors.h"
 #include "hex_grid.h"
@@ -13,6 +14,11 @@
 #include "random_source.h"
 #include "stage.h"
 #include "test_allocator.h"
+
+// The engine's point_distance truncates to whole pixels
+static double exact_distance(const point_t* a, const point_t* b) {
+  return hypot(a->x - b->x, a->y - b->y);
+}
 
 static game_t test_game(void) {
   game_t game = {0};
@@ -355,6 +361,226 @@ static void a_selected_hexagon_is_filled_with_a_light_tone_of_its_border(void) {
   }
 }
 
+static bool same_cell(cell_t a, cell_t b) {
+  return a.col == b.col && a.row == b.row;
+}
+
+static void every_cell_has_six_neighbours_one_step_away(void) {
+  for (int row = 2; row < 6; ++row) {
+    for (int col = 2; col < 6; ++col) {
+      cell_t cell = {col, row};
+      assert(hex_distance(cell, cell) == 0);
+      for (int direction = 0; direction < HEX_DIRECTION_COUNT; ++direction) {
+        cell_t neighbour = hex_neighbour(cell, direction);
+        assert(hex_distance(cell, neighbour) == 1);
+        // Going back the opposite way returns to the cell
+        int opposite = (direction + 3) % HEX_DIRECTION_COUNT;
+        assert(same_cell(hex_neighbour(neighbour, opposite), cell));
+        // Keeping the same direction goes in a straight line
+        assert(hex_distance(cell, hex_neighbour(neighbour, direction)) == 2);
+        for (int other = direction + 1; other < HEX_DIRECTION_COUNT; ++other) {
+          assert(!same_cell(neighbour, hex_neighbour(cell, other)));
+        }
+      }
+    }
+  }
+  // Neighbours on screen are one hexagon width apart
+  hex_grid_t grid = create_hex_grid(1440, 900, 37.5);
+  cell_t cell = {5, 5};
+  point_t centre = hex_cell_centre(&grid, cell);
+  for (int direction = 0; direction < HEX_DIRECTION_COUNT; ++direction) {
+    point_t other = hex_cell_centre(&grid, hex_neighbour(cell, direction));
+    assert(fabs(exact_distance(&centre, &other) - sqrt(3) * 37.5) < 1e-6);
+  }
+}
+
+static void assert_path_is_connected(const board_t* board, cell_t from,
+                                     cell_t to) {
+  assert(board->path_length >= 2);
+  assert(same_cell(board->path[0], from));
+  assert(same_cell(board->path[board->path_length - 1], to));
+  for (int i = 1; i < board->path_length; ++i) {
+    assert(hex_distance(board->path[i - 1], board->path[i]) == 1);
+  }
+}
+
+static void on_an_empty_board_the_path_is_as_long_as_the_distance(void) {
+  board_t board;
+  assert(init_board(&board, 9, 8));
+  for (int from_index = 0; from_index < 72; from_index += 5) {
+    for (int to_index = 0; to_index < 72; ++to_index) {
+      if (from_index == to_index) continue;
+      cell_t from = {from_index % 9, from_index / 9};
+      cell_t to = {to_index % 9, to_index / 9};
+      set_board_value(&board, from, 4);
+      assert(click_board_cell(&board, from) == CLICK_SELECTED);
+      assert(click_board_cell(&board, to) == CLICK_MOVED);
+      assert_path_is_connected(&board, from, to);
+      assert(board.path_length - 1 == hex_distance(from, to));
+      // The hexagon is now on the target and nothing is selected
+      assert(board_value(&board, from) == EMPTY_CELL);
+      assert(board_value(&board, to) == 4);
+      assert(!board.has_selection);
+      assert(board_hexagon_count(&board) == 1);
+      set_board_value(&board, to, EMPTY_CELL);
+    }
+  }
+  destroy_board(&board);
+}
+
+static void the_path_goes_around_other_hexagons(void) {
+  board_t board;
+  assert(init_board(&board, 7, 7));
+  // A wall across row 3 with a single gap at the far right
+  for (int col = 0; col < 6; ++col) {
+    cell_t cell = {col, 3};
+    set_board_value(&board, cell, 2);
+  }
+  cell_t from = {0, 1}, to = {0, 5};
+  set_board_value(&board, from, 5);
+  click_board_cell(&board, from);
+  assert(click_board_cell(&board, to) == CLICK_MOVED);
+  assert_path_is_connected(&board, from, to);
+  assert(board.path_length - 1 > hex_distance(from, to));
+  bool through_gap = false;
+  for (int i = 1; i < board.path_length - 1; ++i) {
+    // Every cell on the way was free
+    assert(board_value(&board, board.path[i]) == EMPTY_CELL);
+    cell_t gap = {6, 3};
+    through_gap = through_gap || same_cell(board.path[i], gap);
+  }
+  assert(through_gap);
+  destroy_board(&board);
+}
+
+static void an_enclosed_hexagon_cannot_move(void) {
+  board_t board;
+  assert(init_board(&board, 7, 7));
+  cell_t enclosed = {3, 3}, target = {0, 0};
+  set_board_value(&board, enclosed, 6);
+  for (int direction = 0; direction < HEX_DIRECTION_COUNT; ++direction) {
+    set_board_value(&board, hex_neighbour(enclosed, direction), 1);
+  }
+  click_board_cell(&board, enclosed);
+  assert(click_board_cell(&board, target) == CLICK_IGNORED);
+  // Nothing moved and the selection stays
+  assert(board_value(&board, enclosed) == 6);
+  assert(board_value(&board, target) == EMPTY_CELL);
+  assert(board.has_selection && same_cell(board.selection, enclosed));
+  assert(board_hexagon_count(&board) == 7);
+
+  // Unreachable from the outside too: the centre of a closed ring
+  set_board_value(&board, enclosed, EMPTY_CELL);
+  board.has_selection = false;
+  cell_t outsider = {0, 6};
+  set_board_value(&board, outsider, 8);
+  click_board_cell(&board, outsider);
+  assert(click_board_cell(&board, enclosed) == CLICK_IGNORED);
+  assert(board_value(&board, outsider) == 8);
+  destroy_board(&board);
+}
+
+static void a_board_that_cannot_be_allocated_leaves_nothing_behind(void) {
+  bool succeeded = false;
+  for (int allocation = 0; allocation < 16 && !succeeded; ++allocation) {
+    fail_allocation_after(allocation);
+    board_t board;
+    succeeded = init_board(&board, 5, 4);
+    if (succeeded) destroy_board(&board);
+    assert(outstanding_allocations() == 0);
+  }
+  assert(succeeded);
+  fail_allocation_after(-1);
+}
+
+// An empty cell far enough from the hexagon to make a journey of it
+static cell_t distant_empty_cell(const board_t* board, cell_t from) {
+  for (int row = board->rows - 1; row >= 0; --row) {
+    for (int col = board->cols - 1; col >= 0; --col) {
+      cell_t cell = {col, row};
+      if (board_value(board, cell) == EMPTY_CELL &&
+          hex_distance(from, cell) >= 5)
+        return cell;
+    }
+  }
+  assert(false);
+  return from;
+}
+
+static void click_at(playing_stage_state_ptr state, cell_t cell) {
+  point_t centre = hex_cell_centre(&state->grid, cell);
+  move_playing_stage_pointer(state, centre.x, centre.y, false);
+  move_playing_stage_pointer(state, centre.x, centre.y, true);
+  move_playing_stage_pointer(state, centre.x, centre.y, false);
+}
+
+static void a_moved_hexagon_travels_along_its_path(void) {
+  game_t game = test_game();
+  playing_stage_state_ptr state = create_playing_stage(&game);
+  cell_t from = first_hexagon(&state->board);
+  cell_t to = distant_empty_cell(&state->board, from);
+  int value = board_value(&state->board, from);
+  assert(!is_playing_stage_travelling(state));
+
+  click_at(state, from);
+  click_at(state, to);
+  assert(board_value(&state->board, to) == value);
+  assert(is_playing_stage_travelling(state));
+
+  // It sets off from where it was
+  point_t start = hex_cell_centre(&state->grid, from);
+  point_t end = hex_cell_centre(&state->grid, to);
+  point_t position = travelling_hexagon_position(state);
+  assert(exact_distance(&position, &start) < 1e-6);
+
+  // Clicks wait until it has arrived
+  click_at(state, to);
+  assert(!state->board.has_selection);
+
+  // It never jumps: each frame moves it less than one cell
+  int steps = state->board.path_length - 1;
+  double step_length = sqrt(3) * state->grid.radius;
+  int frames = 0;
+  while (is_playing_stage_travelling(state)) {
+    point_t before = travelling_hexagon_position(state);
+    advance_playing_stage(state, 1.0);
+    point_t after = travelling_hexagon_position(state);
+    assert(exact_distance(&before, &after) < step_length);
+    assert(++frames < 10000);
+  }
+  position = travelling_hexagon_position(state);
+  assert(exact_distance(&position, &end) < 1e-6);
+  // The journey takes time in proportion to its length
+  double expected_frames = steps * 60.0 / TRAVEL_STEPS_PER_SECOND;
+  assert(fabs(frames - expected_frames) <= 1);
+
+  // Once it has arrived it can be picked up again
+  click_at(state, to);
+  assert(state->board.has_selection);
+  destroy_playing_stage(state);
+}
+
+static void a_stalled_frame_cannot_break_the_journey(void) {
+  game_t game = test_game();
+  playing_stage_state_ptr state = create_playing_stage(&game);
+  cell_t from = first_hexagon(&state->board);
+  cell_t to = distant_empty_cell(&state->board, from);
+  click_at(state, from);
+  click_at(state, to);
+  point_t start = hex_cell_centre(&state->grid, from);
+  advance_playing_stage(state, NAN);
+  advance_playing_stage(state, -5);
+  advance_playing_stage(state, 0);
+  point_t position = travelling_hexagon_position(state);
+  assert(exact_distance(&position, &start) < 1e-6);
+  advance_playing_stage(state, 1e12);
+  assert(!is_playing_stage_travelling(state));
+  point_t end = hex_cell_centre(&state->grid, to);
+  position = travelling_hexagon_position(state);
+  assert(exact_distance(&position, &end) < 1e-6);
+  destroy_playing_stage(state);
+}
+
 int main(int argc, char** argv) {
   assert(argc == 2);
   if (!strcmp(argv[1], "lifecycle"))
@@ -391,6 +617,20 @@ int main(int argc, char** argv) {
     a_held_button_is_a_single_click();
   else if (!strcmp(argv[1], "tone"))
     a_selected_hexagon_is_filled_with_a_light_tone_of_its_border();
+  else if (!strcmp(argv[1], "neighbours"))
+    every_cell_has_six_neighbours_one_step_away();
+  else if (!strcmp(argv[1], "path"))
+    on_an_empty_board_the_path_is_as_long_as_the_distance();
+  else if (!strcmp(argv[1], "detour"))
+    the_path_goes_around_other_hexagons();
+  else if (!strcmp(argv[1], "enclosed"))
+    an_enclosed_hexagon_cannot_move();
+  else if (!strcmp(argv[1], "board_allocation"))
+    a_board_that_cannot_be_allocated_leaves_nothing_behind();
+  else if (!strcmp(argv[1], "travel"))
+    a_moved_hexagon_travels_along_its_path();
+  else if (!strcmp(argv[1], "stall"))
+    a_stalled_frame_cannot_break_the_journey();
   else
     return 1;
   return 0;

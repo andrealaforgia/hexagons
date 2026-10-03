@@ -31,6 +31,13 @@ TESTS = (
     "selection",
     "click",
     "tone",
+    "neighbours",
+    "path",
+    "detour",
+    "enclosed",
+    "board_allocation",
+    "travel",
+    "stall",
 )
 
 
