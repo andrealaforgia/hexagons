@@ -8,6 +8,7 @@
 #include "random_source.h"
 
 #define INITIAL_FILL_FRACTION 0.10
+#define SPAWN_FRACTION 0.01
 // New hexagons carry 1, 2, 4 or 8
 #define NEW_HEXAGON_VALUE_COUNT 4
 
@@ -31,6 +32,7 @@ bool init_board(board_t* board, int cols, int rows) {
   board->has_selection = false;
   board->path_length = 0;
   board->move_pending = false;
+  board->spawn_count = spawn_hexagon_count(cols * rows);
   board->merged_count = 0;
   board->merged_value = EMPTY_CELL;
   board->merged = calloc(cells, sizeof(cell_t));
@@ -159,9 +161,9 @@ static int equal_run(board_t* board, cell_t cell, int direction, int value,
   return length;
 }
 
-bool settle_board_move(board_t* board) {
+settle_result_t settle_board_move(board_t* board, random_source_t* random) {
   if (!board->move_pending) {
-    return false;
+    return SETTLED_NOTHING;
   }
   board->move_pending = false;
   cell_t moved = board->path[board->path_length - 1];
@@ -179,10 +181,11 @@ bool settle_board_move(board_t* board) {
     }
   }
   if (board->merged_count == 0) {
-    return false;
+    populate_board(board, random, board->spawn_count);
+    return SETTLED_SPAWN;
   }
   set_board_value(board, moved, value * MERGE_MULTIPLIER);
-  return true;
+  return SETTLED_MERGE;
 }
 
 click_result_t click_board_cell(board_t* board, cell_t cell) {
@@ -196,6 +199,11 @@ click_result_t click_board_cell(board_t* board, cell_t cell) {
   board->has_selection = true;
   board->selection = cell;
   return CLICK_SELECTED;
+}
+
+int spawn_hexagon_count(int cells) {
+  int count = (int)lround(cells * SPAWN_FRACTION);
+  return count < 1 ? 1 : count;
 }
 
 int initial_hexagon_count(int cells) {

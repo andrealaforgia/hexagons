@@ -50,6 +50,11 @@ TESTS = (
     "arc",
     "debris_capacity",
     "explosion",
+    "spawn",
+    "no_spawn",
+    "spawn_room",
+    "spawn_merge",
+    "spawn_arrival",
 )
 
 

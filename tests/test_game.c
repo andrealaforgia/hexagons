@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -660,7 +661,10 @@ static bool play_hexagon_onto(board_t* board, cell_t target, int value) {
   set_board_value(board, from, value);
   assert(click_board_cell(board, from) == CLICK_SELECTED);
   assert(click_board_cell(board, target) == CLICK_MOVED);
-  return settle_board_move(board);
+  // These boards are laid out by hand: keep new hexagons off them
+  board->spawn_count = 0;
+  random_source_t random = create_random_source(1);
+  return settle_board_move(board, &random) == SETTLED_MERGE;
 }
 
 static void a_line_merges_into_four_times_its_number_where_the_move_ended(
@@ -760,10 +764,12 @@ static void a_line_merges_only_when_a_move_completes_it(void) {
   assert(click_board_cell(&board, end) == CLICK_MOVED);
   assert(board_value(&board, end) == 1);
   assert(board_hexagon_count(&board) == 9);
-  assert(settle_board_move(&board));
+  random_source_t random = create_random_source(1);
+  assert(settle_board_move(&board, &random) == SETTLED_MERGE);
   assert(board_value(&board, end) == 4);
   assert(board_hexagon_count(&board) == 6);
-  assert(!settle_board_move(&board));
+  assert(settle_board_move(&board, &random) == SETTLED_NOTHING);
+  assert(board_hexagon_count(&board) == 6);
   assert(board_value(&board, end) == 4);
   destroy_board(&board);
 }
@@ -936,6 +942,116 @@ static void merged_hexagons_explode(void) {
   assert(outstanding_allocations() == 0);
 }
 
+static void a_move_that_merges_nothing_brings_new_hexagons(void) {
+  const int sizes[][3] = {{21, 15, 3}, {16, 16, 3}, {5, 5, 1}, {30, 20, 6}};
+  for (int i = 0; i < 4; ++i) {
+    int cells = sizes[i][0] * sizes[i][1];
+    assert(spawn_hexagon_count(cells) == sizes[i][2]);
+    board_t board;
+    assert(init_board(&board, sizes[i][0], sizes[i][1]));
+    random_source_t random = create_random_source(9);
+    cell_t from = {0, 0}, to = {3, 3};
+    set_board_value(&board, from, 16);
+    click_board_cell(&board, from);
+    assert(click_board_cell(&board, to) == CLICK_MOVED);
+    // Nothing new until the move is settled
+    assert(board_hexagon_count(&board) == 1);
+    assert(settle_board_move(&board, &random) == SETTLED_SPAWN);
+    assert(board_hexagon_count(&board) == 1 + sizes[i][2]);
+    assert(board_value(&board, to) == 16);
+    // And only once
+    assert(settle_board_move(&board, &random) == SETTLED_NOTHING);
+    assert(board_hexagon_count(&board) == 1 + sizes[i][2]);
+    destroy_board(&board);
+  }
+}
+
+static void a_move_that_merges_brings_no_new_hexagons(void) {
+  board_t board;
+  assert(init_board(&board, 16, 16));
+  random_source_t random = create_random_source(9);
+  cell_t start = {8, 8}, from = {0, 0};
+  cell_t target = lay_line(&board, start, 0, 3, 2);
+  set_board_value(&board, from, 2);
+  click_board_cell(&board, from);
+  assert(click_board_cell(&board, target) == CLICK_MOVED);
+  assert(settle_board_move(&board, &random) == SETTLED_MERGE);
+  assert(board_hexagon_count(&board) == 1);
+  assert(board_value(&board, target) == 8);
+  destroy_board(&board);
+}
+
+static void new_hexagons_fill_what_room_is_left(void) {
+  board_t board;
+  assert(init_board(&board, 30, 20));
+  assert(board.spawn_count == 6);
+  random_source_t random = create_random_source(9);
+  // Fill the board with numbers that never line up four equal, but for
+  // three empty cells and the hexagon about to move
+  for (int row = 0; row < 20; ++row) {
+    for (int col = 0; col < 30; ++col) {
+      cell_t cell = {col, row};
+      set_board_value(&board, cell, 16 << ((col + row * 2) % 3));
+    }
+  }
+  cell_t from = {0, 0}, to = {1, 0}, spare = {5, 5}, other = {20, 12};
+  set_board_value(&board, to, EMPTY_CELL);
+  set_board_value(&board, spare, EMPTY_CELL);
+  set_board_value(&board, other, EMPTY_CELL);
+  set_board_value(&board, from, 1024);
+  click_board_cell(&board, from);
+  assert(click_board_cell(&board, to) == CLICK_MOVED);
+  assert(settle_board_move(&board, &random) == SETTLED_SPAWN);
+  // Three cells were free: the one it left and the two spares
+  assert(board_hexagon_count(&board) == 600);
+  destroy_board(&board);
+}
+
+static void new_hexagons_never_merge_by_themselves(void) {
+  // Rows of equal numbers with a gap every fifth cell: one new hexagon in
+  // four lands on a gap that completes a line
+  for (uint32_t seed = 0; seed < 200; ++seed) {
+    board_t board;
+    assert(init_board(&board, 20, 10));
+    for (int row = 2; row < 10; ++row) {
+      for (int col = 0; col < 20; ++col) {
+        cell_t cell = {col, row};
+        if (col % 5 != 4) set_board_value(&board, cell, 1 << (row % 4));
+      }
+    }
+    int before = board_hexagon_count(&board);
+    random_source_t random = create_random_source(seed);
+    cell_t from = {0, 0}, to = {10, 0};
+    set_board_value(&board, from, 16);
+    click_board_cell(&board, from);
+    assert(click_board_cell(&board, to) == CLICK_MOVED);
+    assert(settle_board_move(&board, &random) == SETTLED_SPAWN);
+    assert(board.merged_count == 0);
+    assert(board_hexagon_count(&board) == before + 1 + board.spawn_count);
+    destroy_board(&board);
+  }
+}
+
+static void new_hexagons_appear_when_the_moved_one_arrives(void) {
+  game_t game = test_game();
+  playing_stage_state_ptr state = create_playing_stage(&game);
+  int before = board_hexagon_count(&state->board);
+  cell_t from = first_hexagon(&state->board);
+  // Wherever it goes, park it clear of any line it could complete
+  set_board_value(&state->board, from, 1024);
+  cell_t to = distant_empty_cell(&state->board, from);
+  click_at(state, from);
+  click_at(state, to);
+  while (is_playing_stage_travelling(state)) {
+    assert(board_hexagon_count(&state->board) == before);
+    advance_playing_stage(state, 1.0);
+  }
+  int cells = hex_grid_cell_count(&state->grid);
+  assert(board_hexagon_count(&state->board) ==
+         before + spawn_hexagon_count(cells));
+  destroy_playing_stage(state);
+}
+
 int main(int argc, char** argv) {
   assert(argc == 2);
   if (!strcmp(argv[1], "lifecycle"))
@@ -1010,6 +1126,16 @@ int main(int argc, char** argv) {
     debris_beyond_capacity_is_dropped();
   else if (!strcmp(argv[1], "explosion"))
     merged_hexagons_explode();
+  else if (!strcmp(argv[1], "spawn"))
+    a_move_that_merges_nothing_brings_new_hexagons();
+  else if (!strcmp(argv[1], "no_spawn"))
+    a_move_that_merges_brings_no_new_hexagons();
+  else if (!strcmp(argv[1], "spawn_room"))
+    new_hexagons_fill_what_room_is_left();
+  else if (!strcmp(argv[1], "spawn_merge"))
+    new_hexagons_never_merge_by_themselves();
+  else if (!strcmp(argv[1], "spawn_arrival"))
+    new_hexagons_appear_when_the_moved_one_arrives();
   else
     return 1;
   return 0;
