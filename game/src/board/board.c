@@ -273,7 +273,9 @@ void reset_board(board_t* board) {
 }
 
 int min_group_size_for(int cells) {
-  int size = (int)lround(MIN_GROUP_SIZE * sqrt(cells / ORDINARY_CELL_COUNT));
+  // Halved, rounded and doubled: the nearest even number
+  int size =
+      2 * (int)lround(MIN_GROUP_SIZE * sqrt(cells / ORDINARY_CELL_COUNT) / 2);
   return size < MIN_GROUP_SIZE ? MIN_GROUP_SIZE : size;
 }
 

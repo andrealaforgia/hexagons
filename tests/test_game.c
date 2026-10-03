@@ -20,6 +20,10 @@
 #include "stage.h"
 #include "test_allocator.h"
 
+// Boards laid out by hand in these tests merge groups of this size, whatever
+// the game asks for on a board of theirs
+#define SMALL_GROUP 4
+
 // The engine's point_distance truncates to whole pixels
 static double exact_distance(const point_t* a, const point_t* b) {
   return hypot(a->x - b->x, a->y - b->y);
@@ -663,10 +667,9 @@ static bool play_hexagon_onto(board_t* board, cell_t target, int value) {
   set_board_value(board, from, value);
   assert(click_board_cell(board, from) == CLICK_SELECTED);
   assert(click_board_cell(board, target) == CLICK_MOVED);
-  // These boards are laid out by hand: keep new hexagons off them, and
-  // play by the rule for a board of ordinary size whatever theirs is
+  // These boards are laid out by hand: keep new hexagons off them
   board->spawn_count = 0;
-  board->min_group_size = MIN_GROUP_SIZE;
+  board->min_group_size = SMALL_GROUP;
   random_source_t random = create_random_source(1);
   settle_result_t result = settle_board_move(board, &random);
   return result == SETTLED_MERGE || result == SETTLED_WALL;
@@ -782,6 +785,7 @@ static void four_equal_hexagons_merge_whatever_shape_they_make(void) {
 static void a_line_merges_only_when_a_move_completes_it(void) {
   board_t board;
   assert(init_board(&board, 16, 16));
+  board.min_group_size = SMALL_GROUP;
   // A line of four that was already there, and a move elsewhere
   cell_t start = {4, 12};
   lay_line(&board, start, 0, 4, 6);
@@ -812,6 +816,7 @@ static void the_merge_shows_when_the_hexagon_arrives(void) {
   game_t game = test_game();
   playing_stage_state_ptr state = create_playing_stage(&game);
   board_t* board = &state->board;
+  board->min_group_size = SMALL_GROUP;
   for (int row = 0; row < board->rows; ++row) {
     for (int col = 0; col < board->cols; ++col) {
       cell_t cell = {col, row};
@@ -935,6 +940,7 @@ static void merged_hexagons_explode(void) {
   game_t game = test_game();
   playing_stage_state_ptr state = create_playing_stage(&game);
   board_t* board = &state->board;
+  board->min_group_size = SMALL_GROUP;
   for (int row = 0; row < board->rows; ++row) {
     for (int col = 0; col < board->cols; ++col) {
       cell_t cell = {col, row};
@@ -1003,6 +1009,7 @@ static void a_move_that_merges_nothing_brings_new_hexagons(void) {
 static void a_move_that_merges_brings_no_new_hexagons(void) {
   board_t board;
   assert(init_board(&board, 16, 16));
+  board.min_group_size = SMALL_GROUP;
   random_source_t random = create_random_source(9);
   cell_t start = {8, 8}, from = {0, 0};
   cell_t target = lay_line(&board, start, 0, 3, 2);
@@ -1090,7 +1097,7 @@ static void a_dealt_board_has_no_group_ready_to_merge(void) {
 
     // A bigger board asks for bigger groups, and is dealt accordingly
     assert(init_board(&board, 30, 20));
-    assert(board.min_group_size == 6);
+    assert(board.min_group_size == 8);
     assert(populate_board(&board, &random, 400) == 400);
     assert(!has_group_ready_to_merge(&board));
     destroy_board(&board);
@@ -1098,28 +1105,32 @@ static void a_dealt_board_has_no_group_ready_to_merge(void) {
 }
 
 static void bigger_boards_need_bigger_groups(void) {
-  // Four on the board every screen gets today, about 300 cells
-  assert(min_group_size_for(300) == 4);
-  assert(min_group_size_for(315) == 4);
-  assert(min_group_size_for(360) == 4);
+  // Six on the board every screen gets today, about 300 cells
+  assert(MIN_GROUP_SIZE == 6);
+  assert(min_group_size_for(300) == 6);
+  assert(min_group_size_for(315) == 6);
+  assert(min_group_size_for(360) == 6);
   // Never fewer, however small the board
-  assert(min_group_size_for(1) == 4);
-  assert(min_group_size_for(100) == 4);
+  assert(min_group_size_for(1) == 6);
+  assert(min_group_size_for(100) == 6);
   // Growing with the width of the board, not its area: four times the
   // cells doubles the group
-  assert(min_group_size_for(480) == 5);
-  assert(min_group_size_for(675) == 6);
-  assert(min_group_size_for(1200) == 8);
-  assert(min_group_size_for(4800) == 16);
+  assert(min_group_size_for(480) == 8);
+  assert(min_group_size_for(600) == 8);
+  assert(min_group_size_for(675) == 10);
+  assert(min_group_size_for(1200) == 12);
+  assert(min_group_size_for(4800) == 24);
   for (int cells = 1; cells < 5000; ++cells) {
     assert(min_group_size_for(cells + 1) >= min_group_size_for(cells));
+    // Always an even number
+    assert(min_group_size_for(cells) % 2 == 0);
   }
 
-  // On a board of 600 cells five in touch do nothing and six merge
-  for (int length = 5; length <= 6; ++length) {
+  // On a board of 600 cells seven in touch do nothing and eight merge
+  for (int length = 7; length <= 8; ++length) {
     board_t board;
     assert(init_board(&board, 30, 20));
-    assert(board.min_group_size == 6);
+    assert(board.min_group_size == 8);
     board.spawn_count = 0;
     random_source_t random = create_random_source(1);
     cell_t start = {10, 10}, from = {0, 0};
@@ -1127,13 +1138,13 @@ static void bigger_boards_need_bigger_groups(void) {
     set_board_value(&board, from, 2);
     click_board_cell(&board, from);
     assert(click_board_cell(&board, target) == CLICK_MOVED);
-    if (length < 6) {
+    if (length < 8) {
       assert(settle_board_move(&board, &random) == SETTLED_SPAWN);
-      assert(board_hexagon_count(&board) == 5);
+      assert(board_hexagon_count(&board) == 7);
     } else {
       assert(settle_board_move(&board, &random) == SETTLED_MERGE);
       assert(board_hexagon_count(&board) == 1);
-      assert(board_value(&board, target) == 8);
+      assert(board_value(&board, target) == 16);
     }
     destroy_board(&board);
   }
@@ -1142,6 +1153,7 @@ static void bigger_boards_need_bigger_groups(void) {
 static void a_cell_where_no_number_fits_is_left_empty(void) {
   board_t board;
   assert(init_board(&board, 11, 11));
+  board.min_group_size = SMALL_GROUP;
   for (int row = 0; row < 11; ++row) {
     for (int col = 0; col < 11; ++col) {
       cell_t cell = {col, row};
@@ -1285,6 +1297,7 @@ static void a_line_turned_to_wall_does_not_explode(void) {
   game_t game = test_game();
   playing_stage_state_ptr state = create_playing_stage(&game);
   board_t* board = &state->board;
+  board->min_group_size = SMALL_GROUP;
   for (int row = 0; row < board->rows; ++row) {
     for (int col = 0; col < board->cols; ++col) {
       cell_t cell = {col, row};

@@ -20,7 +20,7 @@
 #define MAX_HEXAGON_VALUE 1024
 // How many equal hexagons must touch to merge, on a board of ordinary size
 // or smaller; see min_group_size_for
-#define MIN_GROUP_SIZE 4
+#define MIN_GROUP_SIZE 6
 
 typedef struct {
   int cols;
@@ -121,8 +121,9 @@ void reset_board(board_t* board);
  * @brief How many equal hexagons must touch to merge on a board of this size
  *
  * MIN_GROUP_SIZE up to about 300 cells, then growing with the width of the
- * board rather than its area: MIN_GROUP_SIZE * sqrt(cells / 300), rounded.
- * A board with four times the cells needs groups twice as big.
+ * board rather than its area: MIN_GROUP_SIZE * sqrt(cells / 300), rounded to
+ * the nearest even number. A board with four times the cells needs groups
+ * twice as big.
  */
 int min_group_size_for(int cell_count);
 
