@@ -17,6 +17,10 @@ TESTS = (
     "lifecycle",
     "allocation",
     "factories",
+    "roundtrip",
+    "fill",
+    "outside",
+    "hover",
 )
 
 

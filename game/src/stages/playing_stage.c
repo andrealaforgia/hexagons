@@ -7,8 +7,12 @@
 #include "frame.h"
 #include "frame_limiter.h"
 #include "game.h"
+#include "game_constants.h"
 #include "graphics.h"
+#include "grid_renderer.h"
+#include "hex_grid.h"
 #include "keyboard.h"
+#include "mouse.h"
 #include "stage.h"
 
 /* ---- ==== ---- ==== init ==== ---- ==== ---- */
@@ -20,15 +24,47 @@ playing_stage_state_ptr create_playing_stage(game_ptr game) {
   }
   state->game = game;
   state->graphics_context = &game->graphics_context;
+  int screen_height = state->graphics_context->screen_height;
+  state->grid =
+      create_hex_grid(state->graphics_context->screen_width, screen_height,
+                      screen_height * HEX_RADIUS_SCREEN_FRACTION);
   return state;
 }
 
 void destroy_playing_stage(playing_stage_state_ptr state) { free(state); }
 
+/* ---- ==== ---- ==== input ==== ---- ==== ---- */
+
+void point_playing_stage_at(playing_stage_state_ptr state, double x, double y) {
+  state->has_hovered_cell =
+      hex_cell_at(&state->grid, x, y, &state->hovered_cell);
+}
+
+// The mouse reports window coordinates, which differ from screen coordinates
+// when the window is not the size of the display mode (high-DPI displays).
+static void track_mouse(playing_stage_state_ptr state) {
+  mouse_state_ptr mouse = &state->game->mouse_state;
+  update_mouse_state(mouse);
+  int window_width = 0, window_height = 0;
+  get_window_size(state->graphics_context->window, &window_width,
+                  &window_height);
+  if (window_width <= 0 || window_height <= 0) {
+    return;
+  }
+  point_playing_stage_at(
+      state,
+      get_mouse_x(mouse) * (double)state->graphics_context->screen_width /
+          window_width,
+      get_mouse_y(mouse) * (double)state->graphics_context->screen_height /
+          window_height);
+}
+
 /* ---- ==== ---- ==== main game loop ==== ---- ==== ---- */
 
 static void render_playing_stage(playing_stage_state_ptr state) {
   clear_frame(state->graphics_context);
+  render_grid(state->graphics_context, &state->grid,
+              state->has_hovered_cell ? &state->hovered_cell : NULL);
   render_frame(state->graphics_context);
 }
 
@@ -46,6 +82,7 @@ game_stage_action_t handle_playing_stage(playing_stage_state_ptr state) {
     if (is_f11_key_pressed(keyboard)) {
       toggle_fullscreen(state->graphics_context);
     }
+    track_mouse(state);
     render_playing_stage(state);
   }
 }

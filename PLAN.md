@@ -18,7 +18,7 @@ Usable: `make` builds, the game opens full screen on a black screen, Esc quits.
 Work: `git init`, add the engine submodule, Makefile, test runner, `.gitignore`, CI workflow copied from asteroids.
 First test: the build test, then a stage test that creates and destroys the playing stage with no leaked allocations.
 
-### 1. The grid fills the screen
+### 1. The grid fills the screen (done)
 Usable: an empty hexagonal grid covers the whole screen, and the cell under the mouse is highlighted.
 Work: axial hex coordinates, grid dimensions derived from screen size and hex radius, cell to pixel centre, pixel to cell.
 First test: pixel to cell of a cell's own centre returns that cell, for every cell in the grid.
