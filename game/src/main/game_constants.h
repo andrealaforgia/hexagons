@@ -22,8 +22,8 @@
 #define HEX_BORDER_THICKNESS_FRACTION 0.2
 
 // The number fits in a box of these fractions of the hexagon's inner radius
-#define HEX_NUMBER_WIDTH_FRACTION 1.3
-#define HEX_NUMBER_HEIGHT_FRACTION 0.9
+#define HEX_NUMBER_WIDTH_FRACTION 1.5
+#define HEX_NUMBER_HEIGHT_FRACTION 0.8
 
 #define HEX_FILL_COLOR 0x000000
 #define SELECTED_HEX_NUMBER_COLOR 0x000000

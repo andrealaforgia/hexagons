@@ -9,6 +9,7 @@
 #include "graphics.h"
 #include "hex_colors.h"
 #include "hex_grid.h"
+#include "number_text.h"
 #include "text.h"
 
 static void hexagon_points(point_t centre, double radius,
@@ -57,8 +58,12 @@ static int fitting_text_scale(const char* text, double max_width,
 }
 
 static void render_number(const graphics_context_ptr graphics_context,
-                          point_t centre, double radius, int value,
-                          color_t color) {
+                          number_text_t* numbers, point_t centre, double radius,
+                          int value, color_t color) {
+  if (render_number_text(graphics_context, numbers, value, centre, color)) {
+    return;
+  }
+  // Without the font, fall back on the engine's line-drawn text
   char text[16];
   snprintf(text, sizeof(text), "%d", value);
   int scale = fitting_text_scale(text, radius * HEX_NUMBER_WIDTH_FRACTION,
@@ -72,8 +77,8 @@ static void render_number(const graphics_context_ptr graphics_context,
 }
 
 static void render_hexagon(const graphics_context_ptr graphics_context,
-                           point_t centre, double radius, int value,
-                           bool selected) {
+                           number_text_t* numbers, point_t centre,
+                           double radius, int value, bool selected) {
   color_t border = hex_border_color(value);
   SDL_Point points[HEX_CORNER_COUNT];
   hexagon_points(centre, radius, points);
@@ -83,14 +88,14 @@ static void render_hexagon(const graphics_context_ptr graphics_context,
   draw_filled_polygon(
       graphics_context, points, HEX_CORNER_COUNT,
       selected ? hex_selected_fill_color(value) : HEX_FILL_COLOR);
-  render_number(graphics_context, centre, inner_radius, value,
+  render_number(graphics_context, numbers, centre, inner_radius, value,
                 selected ? SELECTED_HEX_NUMBER_COLOR : border);
 }
 
 void render_board(const graphics_context_ptr graphics_context,
                   const hex_grid_t* grid, const board_t* board,
-                  const cell_t* hovered,
-                  const travelling_hexagon_t* travelling) {
+                  const cell_t* hovered, const travelling_hexagon_t* travelling,
+                  number_text_t* numbers) {
   double radius = grid->radius * HEX_DRAWN_RADIUS_FRACTION;
   for (int row = 0; row < grid->rows; ++row) {
     for (int col = 0; col < grid->cols; ++col) {
@@ -105,13 +110,14 @@ void render_board(const graphics_context_ptr graphics_context,
       } else {
         bool selected = board->has_selection && board->selection.col == col &&
                         board->selection.row == row;
-        render_hexagon(graphics_context, centre, radius, value, selected);
+        render_hexagon(graphics_context, numbers, centre, radius, value,
+                       selected);
       }
     }
   }
   if (travelling) {
     // Drawn last so that it passes over the cells on its way
-    render_hexagon(graphics_context, travelling->position, radius,
+    render_hexagon(graphics_context, numbers, travelling->position, radius,
                    board_value(board, travelling->destination), false);
   }
 }

@@ -10,6 +10,7 @@
 #include "game_settings.h"
 #include "hex_colors.h"
 #include "hex_grid.h"
+#include "number_text.h"
 #include "playing_stage.h"
 #include "random_source.h"
 #include "stage.h"
@@ -581,6 +582,55 @@ static void a_stalled_frame_cannot_break_the_journey(void) {
   destroy_playing_stage(state);
 }
 
+static void numbers_are_sized_to_fit_inside_their_hexagon(void) {
+  const int heights[] = {600, 900, 1080, 1964};
+  for (int i = 0; i < 4; ++i) {
+    double width = heights[i] / 20.0, height = heights[i] / 40.0;
+    int previous = 1 << 30;
+    for (int digits = 1; digits <= MAX_NUMBER_DIGITS; ++digits) {
+      int size = number_font_size(digits, width, height);
+      // The glyphs of this font are as wide as they are tall
+      assert(size >= 1);
+      assert(size * digits <= width && size <= height);
+      // A pixel font is only crisp at multiples of its 8 pixel grid
+      int step = size >= 8 ? 8 : 1;
+      assert(size % step == 0);
+      // No room for the next size up
+      assert((size + step) * digits > width || size + step > height);
+      // Longer numbers are never written bigger than shorter ones
+      assert(size <= previous);
+      previous = size;
+    }
+  }
+  // Even an absurdly small box gets a size that can be loaded
+  assert(number_font_size(4, 1, 1) == 1);
+}
+
+static void the_number_font_loads_and_its_numbers_fit(void) {
+  assert(init_ttf_system());
+  double width = 40, height = 22;
+  number_text_t numbers = load_number_text(width, height);
+  const int values[] = {1, 8, 35, 99, 128, 512, 999, 1024};
+  for (int i = 0; i < 8; ++i) {
+    int text_width = 0, text_height = 0;
+    assert(measure_number_text(&numbers, values[i], &text_width, &text_height));
+    assert(text_width > 0 && text_width <= width);
+    assert(text_height > 0 && text_height <= height);
+  }
+  // Values no hexagon can carry have no text
+  int unused;
+  assert(!measure_number_text(&numbers, 0, &unused, &unused));
+  assert(
+      !measure_number_text(&numbers, MAX_HEXAGON_VALUE + 1, &unused, &unused));
+  free_number_text(&numbers);
+
+  // Without the font there is nothing to measure, and nothing breaks
+  number_text_t missing = {0};
+  assert(!measure_number_text(&missing, 5, &unused, &unused));
+  free_number_text(&missing);
+  quit_ttf_system();
+}
+
 int main(int argc, char** argv) {
   assert(argc == 2);
   if (!strcmp(argv[1], "lifecycle"))
@@ -631,6 +681,10 @@ int main(int argc, char** argv) {
     a_moved_hexagon_travels_along_its_path();
   else if (!strcmp(argv[1], "stall"))
     a_stalled_frame_cannot_break_the_journey();
+  else if (!strcmp(argv[1], "font_size"))
+    numbers_are_sized_to_fit_inside_their_hexagon();
+  else if (!strcmp(argv[1], "font"))
+    the_number_font_loads_and_its_numbers_fit();
   else
     return 1;
   return 0;

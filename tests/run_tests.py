@@ -38,6 +38,8 @@ TESTS = (
     "board_allocation",
     "travel",
     "stall",
+    "font_size",
+    "font",
 )
 
 
@@ -65,6 +67,7 @@ def main():
                     text=True,
                     capture_output=True,
                     timeout=10,
+                    cwd=ROOT,  # Assets are found relative to the project
                     env=engine_tests.runtime_environment(),
                 )
                 passed = result.returncode == 0

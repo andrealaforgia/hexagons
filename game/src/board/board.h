@@ -16,6 +16,7 @@
 
 #define EMPTY_CELL 0
 #define MAX_NEW_HEXAGON_VALUE 8
+#define MAX_HEXAGON_VALUE 1024
 
 typedef struct {
   int cols;

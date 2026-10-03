@@ -129,7 +129,8 @@ static void render_playing_stage(playing_stage_state_ptr state) {
   }
   render_board(state->graphics_context, &state->grid, &state->board,
                state->has_hovered_cell ? &state->hovered_cell : NULL,
-               state->travelling ? &travelling : NULL);
+               state->travelling ? &travelling : NULL,
+               &state->game->number_text);
   render_frame(state->graphics_context);
 }
 
