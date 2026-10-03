@@ -40,6 +40,12 @@ TESTS = (
     "stall",
     "font_size",
     "font",
+    "merge",
+    "three",
+    "equal",
+    "crossing",
+    "settle",
+    "arrival",
 )
 
 

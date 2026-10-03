@@ -631,6 +631,156 @@ static void the_number_font_loads_and_its_numbers_fit(void) {
   quit_ttf_system();
 }
 
+// Put hexagons of one value on consecutive cells in a straight line
+static cell_t lay_line(board_t* board, cell_t start, int direction, int count,
+                       int value) {
+  cell_t cell = start;
+  for (int i = 0; i < count; ++i) {
+    set_board_value(board, cell, value);
+    cell = hex_neighbour(cell, direction);
+  }
+  return cell;  // The cell just past the end of the line
+}
+
+// The player moves a new hexagon of the given value onto a cell
+static bool play_hexagon_onto(board_t* board, cell_t target, int value) {
+  cell_t from = {0, 0};
+  assert(board_value(board, from) == EMPTY_CELL);
+  set_board_value(board, from, value);
+  assert(click_board_cell(board, from) == CLICK_SELECTED);
+  assert(click_board_cell(board, target) == CLICK_MOVED);
+  return settle_board_move(board);
+}
+
+static void four_in_a_line_merge_into_their_sum_where_the_move_ended(void) {
+  for (int direction = 0; direction < HEX_DIRECTION_COUNT; ++direction) {
+    for (int length = 4; length <= 6; ++length) {
+      // The moved hexagon completes the line at any position along it
+      for (int gap = 0; gap < length; ++gap) {
+        board_t board;
+        assert(init_board(&board, 16, 16));
+        cell_t start = {8, 8};
+        lay_line(&board, start, direction, length, 2);
+        cell_t target = start;
+        for (int i = 0; i < gap; ++i) target = hex_neighbour(target, direction);
+        set_board_value(&board, target, EMPTY_CELL);
+        assert(board_hexagon_count(&board) == length - 1);
+
+        assert(play_hexagon_onto(&board, target, 2));
+        assert(board_hexagon_count(&board) == 1);
+        assert(board_value(&board, target) == 2 * length);
+        destroy_board(&board);
+      }
+    }
+  }
+}
+
+static void three_in_a_line_do_not_merge(void) {
+  board_t board;
+  assert(init_board(&board, 16, 16));
+  cell_t start = {8, 8};
+  cell_t target = lay_line(&board, start, 0, 2, 5);
+  assert(!play_hexagon_onto(&board, target, 5));
+  assert(board_hexagon_count(&board) == 3);
+  assert(board_value(&board, target) == 5);
+  destroy_board(&board);
+}
+
+static void only_equal_numbers_make_a_line(void) {
+  board_t board;
+  assert(init_board(&board, 16, 16));
+  // 2 2 3 then the moved 2: four in a line, but not four equal
+  cell_t start = {4, 8};
+  cell_t third = lay_line(&board, start, 0, 2, 2);
+  cell_t target = lay_line(&board, third, 0, 1, 3);
+  assert(!play_hexagon_onto(&board, target, 2));
+  assert(board_hexagon_count(&board) == 4);
+
+  // 2 2 2 3 2 then the moved 2 next to the last: the 3 breaks the run
+  board_t broken;
+  assert(init_board(&broken, 16, 16));
+  cell_t breaker = lay_line(&broken, start, 0, 3, 2);
+  cell_t after = lay_line(&broken, breaker, 0, 1, 3);
+  cell_t end = lay_line(&broken, after, 0, 1, 2);
+  assert(!play_hexagon_onto(&broken, end, 2));
+  assert(board_hexagon_count(&broken) == 6);
+  destroy_board(&board);
+  destroy_board(&broken);
+}
+
+static void lines_crossing_where_the_move_ended_merge_together(void) {
+  board_t board;
+  assert(init_board(&board, 16, 16));
+  cell_t target = {8, 8};
+  // Three to the east and three to the south-east of the target
+  lay_line(&board, hex_neighbour(target, 0), 0, 3, 4);
+  lay_line(&board, hex_neighbour(target, 1), 1, 3, 4);
+  // And one lone 4 to the south-west: a line of two, which stays
+  cell_t bystander = hex_neighbour(target, 2);
+  set_board_value(&board, bystander, 4);
+
+  assert(play_hexagon_onto(&board, target, 4));
+  // Seven hexagons merged, the moved one counted once
+  assert(board_value(&board, target) == 28);
+  assert(board_value(&board, bystander) == 4);
+  assert(board_hexagon_count(&board) == 2);
+  destroy_board(&board);
+}
+
+static void a_line_merges_only_when_a_move_completes_it(void) {
+  board_t board;
+  assert(init_board(&board, 16, 16));
+  // A line of four that was already there, and a move elsewhere
+  cell_t start = {4, 12};
+  lay_line(&board, start, 0, 4, 6);
+  cell_t target = {8, 3};
+  assert(!play_hexagon_onto(&board, target, 6));
+  assert(board_hexagon_count(&board) == 5);
+
+  // The merge waits for the move to be settled, and happens once
+  cell_t line = {4, 6};
+  cell_t end = lay_line(&board, line, 0, 3, 1);
+  cell_t from = {0, 0};
+  set_board_value(&board, from, 1);
+  click_board_cell(&board, from);
+  assert(click_board_cell(&board, end) == CLICK_MOVED);
+  assert(board_value(&board, end) == 1);
+  assert(board_hexagon_count(&board) == 9);
+  assert(settle_board_move(&board));
+  assert(board_value(&board, end) == 4);
+  assert(board_hexagon_count(&board) == 6);
+  assert(!settle_board_move(&board));
+  assert(board_value(&board, end) == 4);
+  destroy_board(&board);
+}
+
+static void the_merge_shows_when_the_hexagon_arrives(void) {
+  game_t game = test_game();
+  playing_stage_state_ptr state = create_playing_stage(&game);
+  board_t* board = &state->board;
+  for (int row = 0; row < board->rows; ++row) {
+    for (int col = 0; col < board->cols; ++col) {
+      cell_t cell = {col, row};
+      set_board_value(board, cell, EMPTY_CELL);
+    }
+  }
+  cell_t start = {5, 5}, from = {12, 10};
+  cell_t target = lay_line(board, start, 0, 3, 3);
+  set_board_value(board, from, 3);
+  click_at(state, from);
+  click_at(state, target);
+  assert(is_playing_stage_travelling(state));
+  // Still on its way: nothing has merged yet
+  assert(board_hexagon_count(board) == 4);
+  while (is_playing_stage_travelling(state)) {
+    assert(board_value(board, target) == 3);
+    advance_playing_stage(state, 1.0);
+  }
+  assert(board_value(board, target) == 12);
+  assert(board_hexagon_count(board) == 1);
+  destroy_playing_stage(state);
+}
+
 int main(int argc, char** argv) {
   assert(argc == 2);
   if (!strcmp(argv[1], "lifecycle"))
@@ -685,6 +835,18 @@ int main(int argc, char** argv) {
     numbers_are_sized_to_fit_inside_their_hexagon();
   else if (!strcmp(argv[1], "font"))
     the_number_font_loads_and_its_numbers_fit();
+  else if (!strcmp(argv[1], "merge"))
+    four_in_a_line_merge_into_their_sum_where_the_move_ended();
+  else if (!strcmp(argv[1], "three"))
+    three_in_a_line_do_not_merge();
+  else if (!strcmp(argv[1], "equal"))
+    only_equal_numbers_make_a_line();
+  else if (!strcmp(argv[1], "crossing"))
+    lines_crossing_where_the_move_ended_merge_together();
+  else if (!strcmp(argv[1], "settle"))
+    a_line_merges_only_when_a_move_completes_it();
+  else if (!strcmp(argv[1], "arrival"))
+    the_merge_shows_when_the_hexagon_arrives();
   else
     return 1;
   return 0;

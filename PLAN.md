@@ -40,7 +40,7 @@ Usable: with a hexagon selected, click an empty cell and the hexagon goes there 
 Work: breadth-first search over the six neighbours through empty cells only, move applied to the board, then animation of the hexagon along the returned path.
 First test: the path between two cells on an empty board has length equal to their hex distance. Second: a hexagon enclosed by others has no path.
 
-### 5. Merging
+### 5. Merging (done)
 Usable: moving a hexagon so that it forms a line of four or more equal numbers removes the line and leaves one hexagon with the sum on the destination cell.
 Work: line detection through the destination cell along the three hex axes, merge applied to the board.
 First test: three 2s in a row plus a fourth 2 moved to the end leaves a single 8 on the destination and three empty cells.

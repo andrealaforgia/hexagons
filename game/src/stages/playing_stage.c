@@ -102,6 +102,7 @@ void advance_playing_stage(playing_stage_state_ptr state, double delta_time) {
   if (state->travel_progress >= travel_steps(state)) {
     state->travel_progress = travel_steps(state);
     state->travelling = false;
+    settle_board_move(&state->board);
   }
 }
 

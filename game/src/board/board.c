@@ -28,11 +28,16 @@ bool init_board(board_t* board, int cols, int rows) {
   board->rows = rows;
   board->has_selection = false;
   board->path_length = 0;
+  board->move_pending = false;
+  board->merged_count = 0;
+  board->merged_value = EMPTY_CELL;
+  board->merged = calloc(cells, sizeof(cell_t));
   board->values = calloc(cells, sizeof(int));
   board->path = calloc(cells, sizeof(cell_t));
   board->came_from = calloc(cells, sizeof(int));
   board->queue = calloc(cells, sizeof(int));
-  if (!board->values || !board->path || !board->came_from || !board->queue) {
+  if (!board->values || !board->path || !board->merged || !board->came_from ||
+      !board->queue) {
     destroy_board(board);
     return false;
   }
@@ -42,10 +47,12 @@ bool init_board(board_t* board, int cols, int rows) {
 void destroy_board(board_t* board) {
   free(board->values);
   free(board->path);
+  free(board->merged);
   free(board->came_from);
   free(board->queue);
   board->values = NULL;
   board->path = NULL;
+  board->merged = NULL;
   board->came_from = NULL;
   board->queue = NULL;
 }
@@ -129,7 +136,51 @@ static click_result_t move_selection_to(board_t* board, cell_t target) {
   set_board_value(board, target, board_value(board, board->selection));
   set_board_value(board, board->selection, EMPTY_CELL);
   board->has_selection = false;
+  board->move_pending = true;
   return CLICK_MOVED;
+}
+
+// Empties the run of cells holding the value that starts next to a cell and
+// goes in one direction, if asked to; returns how long the run is
+static int equal_run(board_t* board, cell_t cell, int direction, int value,
+                     bool remove) {
+  int length = 0;
+  cell_t next = hex_neighbour(cell, direction);
+  while (board_value(board, next) == value) {
+    if (remove) {
+      set_board_value(board, next, EMPTY_CELL);
+      board->merged[board->merged_count++] = next;
+    }
+    ++length;
+    next = hex_neighbour(next, direction);
+  }
+  return length;
+}
+
+bool settle_board_move(board_t* board) {
+  if (!board->move_pending) {
+    return false;
+  }
+  board->move_pending = false;
+  cell_t moved = board->path[board->path_length - 1];
+  int value = board_value(board, moved);
+  board->merged_count = 0;
+  board->merged_value = value;
+  // A line runs both ways from the moved hexagon along each of three axes
+  for (int direction = 0; direction < HEX_DIRECTION_COUNT / 2; ++direction) {
+    int opposite = direction + HEX_DIRECTION_COUNT / 2;
+    int length = 1 + equal_run(board, moved, direction, value, false) +
+                 equal_run(board, moved, opposite, value, false);
+    if (length >= MIN_LINE_LENGTH) {
+      equal_run(board, moved, direction, value, true);
+      equal_run(board, moved, opposite, value, true);
+    }
+  }
+  if (board->merged_count == 0) {
+    return false;
+  }
+  set_board_value(board, moved, value * (1 + board->merged_count));
+  return true;
 }
 
 click_result_t click_board_cell(board_t* board, cell_t cell) {

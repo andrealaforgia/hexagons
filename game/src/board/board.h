@@ -17,6 +17,7 @@
 #define EMPTY_CELL 0
 #define MAX_NEW_HEXAGON_VALUE 8
 #define MAX_HEXAGON_VALUE 1024
+#define MIN_LINE_LENGTH 4
 
 typedef struct {
   int cols;
@@ -26,7 +27,11 @@ typedef struct {
   cell_t selection;  // The hexagon the player picked; valid if has_selection
   cell_t* path;      // Cells the last moved hexagon went through, ends included
   int path_length;
-  int* came_from;  // Working space for finding paths
+  bool move_pending;  // A hexagon was moved and the move is not settled yet
+  cell_t* merged;     // Cells emptied by the last merge
+  int merged_count;
+  int merged_value;  // The number the merged hexagons carried
+  int* came_from;    // Working space for finding paths
   int* queue;
 } board_t;
 
@@ -66,6 +71,18 @@ typedef enum {
 click_result_t click_board_cell(board_t* board, cell_t cell);
 
 /** @brief How many hexagons a game starts with on a board of this size */
+/**
+ * @brief Apply the consequences of the last move, once it has been shown
+ *
+ * If the moved hexagon completed one or more straight lines of at least
+ * MIN_LINE_LENGTH equal numbers, every hexagon in those lines is removed and
+ * the moved one takes their sum, itself included. The cells emptied are left
+ * in merged. Does nothing if no move is waiting to be settled.
+ *
+ * @return true if hexagons merged
+ */
+bool settle_board_move(board_t* board);
+
 int initial_hexagon_count(int cell_count);
 
 /**
