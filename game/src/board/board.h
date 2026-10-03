@@ -15,6 +15,7 @@
 #include "random_source.h"
 
 #define EMPTY_CELL 0
+#define WALL_CELL (-1)
 #define MAX_NEW_HEXAGON_VALUE 8
 #define MAX_HEXAGON_VALUE 1024
 #define MIN_LINE_LENGTH 4
@@ -24,14 +25,14 @@
 typedef struct {
   int cols;
   int rows;
-  int* values;  // Row by row; EMPTY_CELL or the number in the hexagon
+  int* values;  // Row by row; EMPTY_CELL, WALL_CELL or a hexagon's number
   bool has_selection;
   cell_t selection;  // The hexagon the player picked; valid if has_selection
   cell_t* path;      // Cells the last moved hexagon went through, ends included
   int path_length;
   int spawn_count;    // New hexagons after each move that merges nothing
   bool move_pending;  // A hexagon was moved and the move is not settled yet
-  cell_t* merged;     // Cells emptied by the last merge
+  cell_t* merged;     // Cells emptied, or turned to wall, by the last merge
   int merged_count;
   int merged_value;  // The number the merged hexagons carried
   int* came_from;    // Working space for finding paths
@@ -55,6 +56,7 @@ int board_value(const board_t* board, cell_t cell);
 void set_board_value(board_t* board, cell_t cell, int value);
 
 int board_hexagon_count(const board_t* board);
+int board_wall_count(const board_t* board);
 
 typedef enum {
   CLICK_IGNORED,
@@ -70,6 +72,7 @@ typedef enum {
  * the selected hexagon unselects it. Clicking an empty cell moves the
  * selected hexagon there by the shortest way through empty cells, leaving
  * that way in path and nothing selected. If there is no way, nothing changes.
+ * Walls can be neither selected nor crossed.
  */
 click_result_t click_board_cell(board_t* board, cell_t cell);
 
@@ -77,6 +80,7 @@ click_result_t click_board_cell(board_t* board, cell_t cell);
 typedef enum {
   SETTLED_NOTHING,  // No move was waiting to be settled
   SETTLED_MERGE,
+  SETTLED_WALL,
   SETTLED_SPAWN,
 } settle_result_t;
 
@@ -88,8 +92,12 @@ typedef enum {
  * removed and the moved one carries MERGE_MULTIPLIER times its number. The
  * cells emptied are left in merged.
  *
- * Otherwise spawn_count new hexagons appear, or as many as there is room
- * for. Lines they happen to complete are left alone: only a move merges.
+ * If that number would pass MAX_HEXAGON_VALUE, every hexagon in those lines,
+ * the moved one included, turns to wall for good instead.
+ *
+ * If no line was completed, spawn_count new hexagons appear, or as many as
+ * there is room for. Lines they happen to complete are left alone: only a move
+ * merges.
  */
 settle_result_t settle_board_move(board_t* board, random_source_t* random);
 

@@ -18,7 +18,8 @@ typedef struct {
 } travelling_hexagon_t;
 
 /**
- * @brief Draw every cell: an outline when empty, a numbered hexagon otherwise
+ * @brief Draw every cell: an outline when empty, a solid grey hexagon for a
+ * wall, a numbered hexagon otherwise
  *
  * The selected hexagon is filled with a light tone of its border colour.
  * @param hovered Cell to highlight, or NULL for none

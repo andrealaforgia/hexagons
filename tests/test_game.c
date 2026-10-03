@@ -664,7 +664,8 @@ static bool play_hexagon_onto(board_t* board, cell_t target, int value) {
   // These boards are laid out by hand: keep new hexagons off them
   board->spawn_count = 0;
   random_source_t random = create_random_source(1);
-  return settle_board_move(board, &random) == SETTLED_MERGE;
+  settle_result_t result = settle_board_move(board, &random);
+  return result == SETTLED_MERGE || result == SETTLED_WALL;
 }
 
 static void a_line_merges_into_four_times_its_number_where_the_move_ended(
@@ -1052,6 +1053,111 @@ static void new_hexagons_appear_when_the_moved_one_arrives(void) {
   destroy_playing_stage(state);
 }
 
+static void a_merge_beyond_the_highest_number_turns_the_line_to_wall(void) {
+  const int values[] = {512, 1024};
+  for (int i = 0; i < 2; ++i) {
+    board_t board;
+    assert(init_board(&board, 16, 16));
+    cell_t start = {8, 8};
+    cell_t target = lay_line(&board, start, 0, 3, values[i]);
+    cell_t bystander = {3, 12};
+    set_board_value(&board, bystander, values[i]);
+    assert(play_hexagon_onto(&board, target, values[i]));
+    // Four times the number would pass 1024: every hexagon in the line,
+    // the moved one included, is wall instead
+    cell_t cell = start;
+    for (int n = 0; n < 4; ++n) {
+      assert(board_value(&board, cell) == WALL_CELL);
+      cell = hex_neighbour(cell, 0);
+    }
+    assert(board_value(&board, bystander) == values[i]);
+    assert(board_wall_count(&board) == 4);
+    // Walls are not hexagons
+    assert(board_hexagon_count(&board) == 1);
+    destroy_board(&board);
+  }
+
+  // 256 is the last number that can still merge: it makes 1024
+  board_t board;
+  assert(init_board(&board, 16, 16));
+  cell_t start = {8, 8};
+  cell_t target = lay_line(&board, start, 0, 3, 256);
+  assert(play_hexagon_onto(&board, target, 256));
+  assert(board_value(&board, target) == MAX_HEXAGON_VALUE);
+  assert(board_wall_count(&board) == 0);
+  destroy_board(&board);
+}
+
+static void walls_cannot_be_selected_moved_or_crossed(void) {
+  board_t board;
+  assert(init_board(&board, 7, 7));
+  // A wall across the whole of row 3
+  for (int col = 0; col < 7; ++col) {
+    cell_t cell = {col, 3};
+    set_board_value(&board, cell, WALL_CELL);
+  }
+  cell_t wall = {2, 3}, hexagon = {1, 1}, same_side = {5, 2}, far_side = {1, 5};
+  set_board_value(&board, hexagon, 4);
+
+  assert(click_board_cell(&board, wall) == CLICK_IGNORED);
+  assert(!board.has_selection);
+
+  click_board_cell(&board, hexagon);
+  // Clicking a wall with a hexagon selected changes nothing
+  assert(click_board_cell(&board, wall) == CLICK_IGNORED);
+  assert(board.has_selection && same_cell(board.selection, hexagon));
+  assert(board_value(&board, wall) == WALL_CELL);
+  // There is no way through to the other side
+  assert(click_board_cell(&board, far_side) == CLICK_IGNORED);
+  assert(board_value(&board, hexagon) == 4);
+  // But the hexagon is free on its own side
+  assert(click_board_cell(&board, same_side) == CLICK_MOVED);
+  for (int i = 0; i < board.path_length; ++i) assert(board.path[i].row < 3);
+  destroy_board(&board);
+}
+
+static void walls_take_no_part_in_lines_or_new_hexagons(void) {
+  board_t board;
+  assert(init_board(&board, 16, 16));
+  // Three walls in a row are not three equal numbers
+  cell_t start = {8, 8};
+  cell_t target = lay_line(&board, start, 0, 3, WALL_CELL);
+  assert(!play_hexagon_onto(&board, target, 2));
+  assert(board_wall_count(&board) == 3);
+  destroy_board(&board);
+
+  // New hexagons never land on a wall
+  assert(init_board(&board, 4, 3));
+  cell_t wall = {1, 1};
+  set_board_value(&board, wall, WALL_CELL);
+  random_source_t random = create_random_source(5);
+  assert(populate_board(&board, &random, 50) == 11);
+  assert(board_value(&board, wall) == WALL_CELL);
+  assert(board_hexagon_count(&board) == 11);
+  destroy_board(&board);
+}
+
+static void a_line_turned_to_wall_does_not_explode(void) {
+  game_t game = test_game();
+  playing_stage_state_ptr state = create_playing_stage(&game);
+  board_t* board = &state->board;
+  for (int row = 0; row < board->rows; ++row) {
+    for (int col = 0; col < board->cols; ++col) {
+      cell_t cell = {col, row};
+      set_board_value(board, cell, EMPTY_CELL);
+    }
+  }
+  cell_t start = {5, 5}, from = {12, 10};
+  cell_t target = lay_line(board, start, 0, 3, 1024);
+  set_board_value(board, from, 1024);
+  click_at(state, from);
+  click_at(state, target);
+  while (is_playing_stage_travelling(state)) advance_playing_stage(state, 1.0);
+  assert(board_wall_count(board) == 4);
+  assert(debris_piece_count(&state->debris) == 0);
+  destroy_playing_stage(state);
+}
+
 int main(int argc, char** argv) {
   assert(argc == 2);
   if (!strcmp(argv[1], "lifecycle"))
@@ -1136,6 +1242,14 @@ int main(int argc, char** argv) {
     new_hexagons_never_merge_by_themselves();
   else if (!strcmp(argv[1], "spawn_arrival"))
     new_hexagons_appear_when_the_moved_one_arrives();
+  else if (!strcmp(argv[1], "wall"))
+    a_merge_beyond_the_highest_number_turns_the_line_to_wall();
+  else if (!strcmp(argv[1], "wall_blocks"))
+    walls_cannot_be_selected_moved_or_crossed();
+  else if (!strcmp(argv[1], "wall_inert"))
+    walls_take_no_part_in_lines_or_new_hexagons();
+  else if (!strcmp(argv[1], "wall_quiet"))
+    a_line_turned_to_wall_does_not_explode();
   else
     return 1;
   return 0;

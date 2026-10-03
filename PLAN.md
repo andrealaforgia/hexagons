@@ -52,7 +52,7 @@ Work: spawn on random empty cells after a non-merging move.
 First test: after a non-merging move the hexagon count grows by round(N / 100); after a merging move it does not grow.
 Decision needed: how "no automatic merges" is honoured (see open decisions).
 
-### 7. Walls
+### 7. Walls (done)
 Usable: a merge whose sum would exceed 1024 produces solid wall instead; walls cannot be selected, moved or crossed.
 Work: wall cell state, pathfinding treats walls as blocked, wall rendering.
 First test: four 512s in a line produce wall and no 2048.

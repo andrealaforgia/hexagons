@@ -74,14 +74,26 @@ void set_board_value(board_t* board, cell_t cell, int value) {
   }
 }
 
-int board_hexagon_count(const board_t* board) {
+static int count_cells(const board_t* board, bool (*matches)(int value)) {
   int count = 0;
   for (int i = 0; i < cell_count(board); ++i) {
-    if (board->values[i] != EMPTY_CELL) {
+    if (matches(board->values[i])) {
       ++count;
     }
   }
   return count;
+}
+
+static bool is_hexagon(int value) { return value > 0; }
+static bool is_wall(int value) { return value == WALL_CELL; }
+static bool is_empty(int value) { return value == EMPTY_CELL; }
+
+int board_hexagon_count(const board_t* board) {
+  return count_cells(board, is_hexagon);
+}
+
+int board_wall_count(const board_t* board) {
+  return count_cells(board, is_wall);
 }
 
 static bool is_selected(const board_t* board, cell_t cell) {
@@ -144,15 +156,14 @@ static click_result_t move_selection_to(board_t* board, cell_t target) {
   return CLICK_MOVED;
 }
 
-// Empties the run of cells holding the value that starts next to a cell and
-// goes in one direction, if asked to; returns how long the run is
+// Length of the run of cells holding the value that starts next to a cell
+// and goes in one direction; the cells are added to merged if asked to
 static int equal_run(board_t* board, cell_t cell, int direction, int value,
-                     bool remove) {
+                     bool collect) {
   int length = 0;
   cell_t next = hex_neighbour(cell, direction);
   while (board_value(board, next) == value) {
-    if (remove) {
-      set_board_value(board, next, EMPTY_CELL);
+    if (collect) {
       board->merged[board->merged_count++] = next;
     }
     ++length;
@@ -184,13 +195,21 @@ settle_result_t settle_board_move(board_t* board, random_source_t* random) {
     populate_board(board, random, board->spawn_count);
     return SETTLED_SPAWN;
   }
-  set_board_value(board, moved, value * MERGE_MULTIPLIER);
-  return SETTLED_MERGE;
+  bool walled = value * MERGE_MULTIPLIER > MAX_HEXAGON_VALUE;
+  for (int i = 0; i < board->merged_count; ++i) {
+    set_board_value(board, board->merged[i], walled ? WALL_CELL : EMPTY_CELL);
+  }
+  set_board_value(board, moved, walled ? WALL_CELL : value * MERGE_MULTIPLIER);
+  return walled ? SETTLED_WALL : SETTLED_MERGE;
 }
 
 click_result_t click_board_cell(board_t* board, cell_t cell) {
-  if (board_value(board, cell) == EMPTY_CELL) {
+  int value = board_value(board, cell);
+  if (value == EMPTY_CELL) {
     return move_selection_to(board, cell);
+  }
+  if (value == WALL_CELL) {
+    return CLICK_IGNORED;
   }
   if (is_selected(board, cell)) {
     board->has_selection = false;
@@ -221,7 +240,7 @@ static int nth_empty_cell(const board_t* board, int n) {
 }
 
 int populate_board(board_t* board, random_source_t* random, int count) {
-  int empty = cell_count(board) - board_hexagon_count(board);
+  int empty = count_cells(board, is_empty);
   int added = 0;
   while (added < count && empty > 0) {
     int index = nth_empty_cell(board, random_below(random, empty));

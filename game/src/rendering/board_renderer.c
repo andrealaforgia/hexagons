@@ -92,6 +92,16 @@ static void render_hexagon(const graphics_context_ptr graphics_context,
                 selected ? SELECTED_HEX_NUMBER_COLOR : border);
 }
 
+static void render_wall(const graphics_context_ptr graphics_context,
+                        point_t centre, double radius) {
+  SDL_Point points[HEX_CORNER_COUNT];
+  hexagon_points(centre, radius, points);
+  draw_filled_polygon(graphics_context, points, HEX_CORNER_COUNT,
+                      WALL_BORDER_COLOR);
+  hexagon_points(centre, radius * (1 - HEX_BORDER_THICKNESS_FRACTION), points);
+  draw_filled_polygon(graphics_context, points, HEX_CORNER_COUNT, WALL_COLOR);
+}
+
 void render_board(const graphics_context_ptr graphics_context,
                   const hex_grid_t* grid, const board_t* board,
                   const cell_t* hovered, const travelling_hexagon_t* travelling,
@@ -107,6 +117,8 @@ void render_board(const graphics_context_ptr graphics_context,
       if (value == EMPTY_CELL || on_its_way) {
         bool is_hovered = hovered && hovered->col == col && hovered->row == row;
         render_empty_cell(graphics_context, centre, radius, is_hovered);
+      } else if (value == WALL_CELL) {
+        render_wall(graphics_context, centre, radius);
       } else {
         bool selected = board->has_selection && board->selection.col == col &&
                         board->selection.row == row;

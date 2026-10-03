@@ -55,6 +55,10 @@ TESTS = (
     "spawn_room",
     "spawn_merge",
     "spawn_arrival",
+    "wall",
+    "wall_blocks",
+    "wall_inert",
+    "wall_quiet",
 )
 
 
