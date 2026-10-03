@@ -28,6 +28,9 @@ TESTS = (
     "bounds",
     "colours",
     "start",
+    "selection",
+    "click",
+    "tone",
 )
 
 

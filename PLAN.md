@@ -30,7 +30,7 @@ Work: cell states (empty, hexagon with value and colour), initial population fro
 First test: a new board of N cells holds exactly round(N / 10) hexagons, all on distinct cells.
 Decided: new hexagons carry a random number from 1 to 8, and the border colour is set by the number.
 
-### 3. Selection
+### 3. Selection (done)
 Usable: click a hexagon to select it, its fill turns to a light tone of its border; click it again to unselect; click another hexagon to move the selection.
 Work: selection state on the board, click edge detection (a press is one click, not one per frame), light tone colour function.
 First test: selecting the selected cell clears the selection.

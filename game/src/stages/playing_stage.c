@@ -49,9 +49,15 @@ void destroy_playing_stage(playing_stage_state_ptr state) {
 
 /* ---- ==== ---- ==== input ==== ---- ==== ---- */
 
-void point_playing_stage_at(playing_stage_state_ptr state, double x, double y) {
+void move_playing_stage_pointer(playing_stage_state_ptr state, double x,
+                                double y, bool button_down) {
   state->has_hovered_cell =
       hex_cell_at(&state->grid, x, y, &state->hovered_cell);
+  bool clicked = button_down && !state->button_was_down;
+  state->button_was_down = button_down;
+  if (clicked && state->has_hovered_cell) {
+    click_board_cell(&state->board, state->hovered_cell);
+  }
 }
 
 // The mouse reports window coordinates, which differ from screen coordinates
@@ -65,12 +71,13 @@ static void track_mouse(playing_stage_state_ptr state) {
   if (window_width <= 0 || window_height <= 0) {
     return;
   }
-  point_playing_stage_at(
+  move_playing_stage_pointer(
       state,
       get_mouse_x(mouse) * (double)state->graphics_context->screen_width /
           window_width,
       get_mouse_y(mouse) * (double)state->graphics_context->screen_height /
-          window_height);
+          window_height,
+      is_mouse_left_button_pressed(mouse));
 }
 
 /* ---- ==== ---- ==== main game loop ==== ---- ==== ---- */

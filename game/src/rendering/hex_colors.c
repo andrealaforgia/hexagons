@@ -6,6 +6,8 @@
 
 #define GOLDEN_ANGLE_DEGREES 137.50776405003785
 #define BORDER_SATURATION 0.75
+// How far the selected fill moves from the border colour towards white
+#define SELECTED_FILL_WHITENESS 0.55
 
 // Fully bright colour of the given hue (degrees) and saturation
 static color_t bright_color(double hue, double saturation) {
@@ -25,4 +27,13 @@ color_t hex_border_color(int value) {
   // small set of numbers, far apart on the colour wheel
   return bright_color(fmod(value * GOLDEN_ANGLE_DEGREES, 360),
                       BORDER_SATURATION);
+}
+
+static int lighten(int channel) {
+  return channel + (int)lround((255 - channel) * SELECTED_FILL_WHITENESS);
+}
+
+color_t hex_selected_fill_color(int value) {
+  color_t border = hex_border_color(value);
+  return COLOR(lighten(R(border)), lighten(G(border)), lighten(B(border)));
 }

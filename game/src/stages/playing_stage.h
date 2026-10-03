@@ -24,6 +24,7 @@ typedef struct {
   random_source_t random;
   bool has_hovered_cell;
   cell_t hovered_cell;
+  bool button_was_down;
 } playing_stage_state_t;
 
 typedef playing_stage_state_t* playing_stage_state_ptr;
@@ -32,9 +33,14 @@ playing_stage_state_ptr create_playing_stage(game_ptr game);
 void destroy_playing_stage(playing_stage_state_ptr state);
 
 /**
- * @brief Tell the stage where on the screen the mouse is pointing
+ * @brief Tell the stage where on the screen the mouse is and whether its
+ * button is down
+ *
+ * Call once per frame. A click happens when the button goes down, however
+ * long it is then held.
  */
-void point_playing_stage_at(playing_stage_state_ptr state, double x, double y);
+void move_playing_stage_pointer(playing_stage_state_ptr state, double x,
+                                double y, bool button_down);
 
 game_stage_action_t handle_playing_stage(playing_stage_state_ptr state);
 

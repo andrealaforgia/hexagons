@@ -25,6 +25,7 @@ static int cell_index(const board_t* board, cell_t cell) {
 bool init_board(board_t* board, int cols, int rows) {
   board->cols = cols;
   board->rows = rows;
+  board->has_selection = false;
   board->values = calloc((size_t)(cols * rows), sizeof(int));
   return board->values != NULL;
 }
@@ -55,6 +56,23 @@ int board_hexagon_count(const board_t* board) {
     }
   }
   return count;
+}
+
+static bool is_selected(const board_t* board, cell_t cell) {
+  return board->has_selection && board->selection.col == cell.col &&
+         board->selection.row == cell.row;
+}
+
+void click_board_cell(board_t* board, cell_t cell) {
+  if (board_value(board, cell) == EMPTY_CELL) {
+    return;
+  }
+  if (is_selected(board, cell)) {
+    board->has_selection = false;
+    return;
+  }
+  board->has_selection = true;
+  board->selection = cell;
 }
 
 int initial_hexagon_count(int cells) {

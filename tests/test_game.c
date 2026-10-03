@@ -130,10 +130,10 @@ static void pointing_highlights_the_cell_under_the_mouse(void) {
   assert(!state->has_hovered_cell);
   cell_t cell = {3, 2};
   point_t centre = hex_cell_centre(&state->grid, cell);
-  point_playing_stage_at(state, centre.x, centre.y);
+  move_playing_stage_pointer(state, centre.x, centre.y, false);
   assert(state->has_hovered_cell);
   assert(state->hovered_cell.col == 3 && state->hovered_cell.row == 2);
-  point_playing_stage_at(state, -500, -500);
+  move_playing_stage_pointer(state, -500, -500, false);
   assert(!state->has_hovered_cell);
   destroy_playing_stage(state);
 }
@@ -260,6 +260,101 @@ static void the_game_starts_with_a_tenth_of_the_cells_filled(void) {
   assert(outstanding_allocations() == 0);
 }
 
+static bool is_selected(const board_t* board, cell_t cell) {
+  return board->has_selection && board->selection.col == cell.col &&
+         board->selection.row == cell.row;
+}
+
+static void clicking_a_hexagon_selects_it_and_clicking_again_unselects(void) {
+  board_t board;
+  assert(init_board(&board, 6, 5));
+  cell_t first = {1, 1}, second = {4, 3}, empty = {2, 2};
+  set_board_value(&board, first, 3);
+  set_board_value(&board, second, 7);
+  assert(!board.has_selection);
+
+  click_board_cell(&board, first);
+  assert(is_selected(&board, first));
+
+  click_board_cell(&board, first);
+  assert(!board.has_selection);
+
+  // Clicking another hexagon moves the selection to it
+  click_board_cell(&board, first);
+  click_board_cell(&board, second);
+  assert(is_selected(&board, second));
+  assert(!is_selected(&board, first));
+
+  // There is nothing to select on an empty cell or off the board
+  click_board_cell(&board, second);
+  click_board_cell(&board, empty);
+  assert(!board.has_selection);
+  cell_t outside = {6, 0};
+  click_board_cell(&board, outside);
+  assert(!board.has_selection);
+  destroy_board(&board);
+}
+
+static cell_t first_hexagon(const board_t* board) {
+  for (int row = 0; row < board->rows; ++row) {
+    for (int col = 0; col < board->cols; ++col) {
+      cell_t cell = {col, row};
+      if (board_value(board, cell) != EMPTY_CELL) return cell;
+    }
+  }
+  assert(false);
+  cell_t none = {-1, -1};
+  return none;
+}
+
+static void a_held_button_is_a_single_click(void) {
+  game_t game = test_game();
+  playing_stage_state_ptr state = create_playing_stage(&game);
+  cell_t cell = first_hexagon(&state->board);
+  point_t centre = hex_cell_centre(&state->grid, cell);
+
+  // Pointing without pressing selects nothing
+  move_playing_stage_pointer(state, centre.x, centre.y, false);
+  assert(!state->board.has_selection);
+
+  // The button stays down over several frames: still one click
+  for (int frame = 0; frame < 5; ++frame) {
+    move_playing_stage_pointer(state, centre.x, centre.y, true);
+    assert(is_selected(&state->board, cell));
+  }
+
+  // Released and pressed again: a second click, which unselects
+  move_playing_stage_pointer(state, centre.x, centre.y, false);
+  assert(is_selected(&state->board, cell));
+  move_playing_stage_pointer(state, centre.x, centre.y, true);
+  assert(!state->board.has_selection);
+
+  // A click outside the grid changes nothing
+  move_playing_stage_pointer(state, centre.x, centre.y, false);
+  move_playing_stage_pointer(state, centre.x, centre.y, true);
+  move_playing_stage_pointer(state, -500, -500, false);
+  move_playing_stage_pointer(state, -500, -500, true);
+  assert(is_selected(&state->board, cell));
+  destroy_playing_stage(state);
+}
+
+static void a_selected_hexagon_is_filled_with_a_light_tone_of_its_border(void) {
+  for (int value = 1; value <= 1024; ++value) {
+    color_t border = hex_border_color(value);
+    color_t fill = hex_selected_fill_color(value);
+    // Lighter in every channel, so the same hue washed out towards white
+    assert(R(fill) >= R(border) && G(fill) >= G(border) &&
+           B(fill) >= B(border));
+    int lift =
+        (R(fill) - R(border)) + (G(fill) - G(border)) + (B(fill) - B(border));
+    assert(lift >= 100);
+    // Still a tint: clearly not the black of an unselected hexagon, and
+    // not plain white
+    assert(fill != COLOR_WHITE);
+    assert(R(fill) + G(fill) + B(fill) >= 450);
+  }
+}
+
 int main(int argc, char** argv) {
   assert(argc == 2);
   if (!strcmp(argv[1], "lifecycle"))
@@ -290,6 +385,12 @@ int main(int argc, char** argv) {
     each_number_has_its_own_border_colour();
   else if (!strcmp(argv[1], "start"))
     the_game_starts_with_a_tenth_of_the_cells_filled();
+  else if (!strcmp(argv[1], "selection"))
+    clicking_a_hexagon_selects_it_and_clicking_again_unselects();
+  else if (!strcmp(argv[1], "click"))
+    a_held_button_is_a_single_click();
+  else if (!strcmp(argv[1], "tone"))
+    a_selected_hexagon_is_filled_with_a_light_tone_of_its_border();
   else
     return 1;
   return 0;

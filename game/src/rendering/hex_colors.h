@@ -13,4 +13,9 @@
  */
 color_t hex_border_color(int value);
 
+/**
+ * @brief Fill of a selected hexagon: a light tone of its border colour
+ */
+color_t hex_selected_fill_color(int value);
+
 #endif  // GAME_SRC_RENDERING_HEX_COLORS_H_

@@ -21,6 +21,8 @@ typedef struct {
   int cols;
   int rows;
   int* values;  // Row by row; EMPTY_CELL or the number in the hexagon
+  bool has_selection;
+  cell_t selection;  // The hexagon the player picked; valid if has_selection
 } board_t;
 
 /**
@@ -40,6 +42,14 @@ int board_value(const board_t* board, cell_t cell);
 void set_board_value(board_t* board, cell_t cell, int value);
 
 int board_hexagon_count(const board_t* board);
+
+/**
+ * @brief Apply the player's click on a cell
+ *
+ * Clicking a hexagon selects it, replacing any earlier selection; clicking
+ * the selected hexagon unselects it.
+ */
+void click_board_cell(board_t* board, cell_t cell);
 
 /** @brief How many hexagons a game starts with on a board of this size */
 int initial_hexagon_count(int cell_count);

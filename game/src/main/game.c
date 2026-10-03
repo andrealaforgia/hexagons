@@ -1,5 +1,6 @@
 #include "game.h"
 
+#include <SDL.h>
 #include <stdlib.h>
 
 #include "game_settings.h"
@@ -15,6 +16,8 @@ game_t init_game(game_settings_t game_settings) {
                             game.settings.window_mode, game.settings.vsync);
   game.keyboard_state = init_keyboard_state();
   game.mouse_state = init_mouse_state();
+  // The engine hides the pointer; this game is played with it
+  SDL_ShowCursor(SDL_ENABLE);
   game.seed = (unsigned)rand();
   return game;
 }

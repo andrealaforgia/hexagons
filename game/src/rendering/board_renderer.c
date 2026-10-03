@@ -72,16 +72,19 @@ static void render_number(const graphics_context_ptr graphics_context,
 }
 
 static void render_hexagon(const graphics_context_ptr graphics_context,
-                           point_t centre, double radius, int value) {
+                           point_t centre, double radius, int value,
+                           bool selected) {
   color_t border = hex_border_color(value);
   SDL_Point points[HEX_CORNER_COUNT];
   hexagon_points(centre, radius, points);
   draw_filled_polygon(graphics_context, points, HEX_CORNER_COUNT, border);
   double inner_radius = radius * (1 - HEX_BORDER_THICKNESS_FRACTION);
   hexagon_points(centre, inner_radius, points);
-  draw_filled_polygon(graphics_context, points, HEX_CORNER_COUNT,
-                      HEX_FILL_COLOR);
-  render_number(graphics_context, centre, inner_radius, value, border);
+  draw_filled_polygon(
+      graphics_context, points, HEX_CORNER_COUNT,
+      selected ? hex_selected_fill_color(value) : HEX_FILL_COLOR);
+  render_number(graphics_context, centre, inner_radius, value,
+                selected ? SELECTED_HEX_NUMBER_COLOR : border);
 }
 
 void render_board(const graphics_context_ptr graphics_context,
@@ -97,7 +100,9 @@ void render_board(const graphics_context_ptr graphics_context,
         bool is_hovered = hovered && hovered->col == col && hovered->row == row;
         render_empty_cell(graphics_context, centre, radius, is_hovered);
       } else {
-        render_hexagon(graphics_context, centre, radius, value);
+        bool selected = board->has_selection && board->selection.col == col &&
+                        board->selection.row == row;
+        render_hexagon(graphics_context, centre, radius, value, selected);
       }
     }
   }
