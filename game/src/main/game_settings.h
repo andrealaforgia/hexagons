@@ -21,10 +21,11 @@ typedef struct {
   int display_mode;
   window_mode_t window_mode;
   int fps;
+  int min_group;  // Hexagons that must touch to merge; 0 lets the board decide
 } game_settings_t;
 
 game_settings_t init_game_settings(bool show_fps, bool vsync, int display,
                                    int display_mode, window_mode_t window_mode,
-                                   int fps);
+                                   int fps, int min_group);
 
 #endif  // GAME_SRC_MAIN_GAME_SETTINGS_H_

@@ -13,6 +13,7 @@
 #include "frame_limiter.h"
 #include "game.h"
 #include "game_constants.h"
+#include "game_options.h"
 #include "game_over_renderer.h"
 #include "graphics.h"
 #include "hex_colors.h"
@@ -40,6 +41,9 @@ playing_stage_state_ptr create_playing_stage(game_ptr game) {
       !init_debris(&state->debris, cells * DEBRIS_PIECES_PER_HEXAGON)) {
     destroy_playing_stage(state);
     return NULL;
+  }
+  if (game->settings.min_group != AUTOMATIC_MIN_GROUP) {
+    state->board.min_group_size = game->settings.min_group;
   }
   state->random = create_random_source(game->seed);
   state->effects_random = create_random_source(game->seed);

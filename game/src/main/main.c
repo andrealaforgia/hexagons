@@ -4,6 +4,7 @@
 
 #include "command_line.h"
 #include "game.h"
+#include "game_options.h"
 #include "graphics.h"
 #include "logger.h"
 #include "stage.h"
@@ -30,11 +31,17 @@ static bool run_game(const game_ptr game) {
 int main(int argc, char* argv[]) {
   srand(time(NULL));
 
+  game_options_t game_options = take_game_options(&argc, argv);
+  if (!game_options.valid) {
+    return EXIT_FAILURE;
+  }
+
   command_line_options_t command_line_options =
       parse_command_line_options(argc, argv);
 
   if (command_line_options.help) {
     print_help();
+    print_game_help();
     return 0;
   }
 
@@ -46,7 +53,8 @@ int main(int argc, char* argv[]) {
   game_settings_t game_settings = init_game_settings(
       command_line_options.show_fps, command_line_options.vsync,
       command_line_options.display, command_line_options.display_mode,
-      command_line_options.window_mode, command_line_options.fps);
+      command_line_options.window_mode, command_line_options.fps,
+      game_options.min_group);
 
   game_t game = init_game(game_settings);
 

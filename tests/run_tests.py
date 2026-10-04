@@ -69,6 +69,8 @@ TESTS = (
     "flash",
     "hand",
     "hand_scale",
+    "option",
+    "option_played",
 )
 
 

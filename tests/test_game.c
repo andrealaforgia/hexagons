@@ -9,6 +9,7 @@
 #include "debris.h"
 #include "game.h"
 #include "game_constants.h"
+#include "game_options.h"
 #include "game_over_effects.h"
 #include "game_settings.h"
 #include "hand_cursor.h"
@@ -31,7 +32,8 @@ static double exact_distance(const point_t* a, const point_t* b) {
 
 static game_t test_game(void) {
   game_t game = {0};
-  game.settings = init_game_settings(false, false, 0, 0, WINDOWED, 60);
+  game.settings =
+      init_game_settings(false, false, 0, 0, WINDOWED, 60, AUTOMATIC_MIN_GROUP);
   game.graphics_context.screen_width = 1440;
   game.graphics_context.screen_height = 900;
   game.graphics_context.screen_center = point(720, 450);
@@ -1491,6 +1493,89 @@ static void the_pointer_is_enlarged_in_whole_pixels(void) {
   assert(hand_cursor_scale(0) >= 2);
 }
 
+static void the_minimum_group_can_be_given_on_the_command_line(void) {
+  // The option is taken out, leaving the rest for the engine to read
+  char* given[] = {"hexagons", "--fps=30", "--min-group=8", "--vsync", NULL};
+  int count = 4;
+  game_options_t options = take_game_options(&count, given);
+  assert(options.valid && options.min_group == 8);
+  assert(count == 3);
+  assert(!strcmp(given[0], "hexagons") && !strcmp(given[1], "--fps=30") &&
+         !strcmp(given[2], "--vsync"));
+
+  // Without it the board decides, and nothing is touched
+  char* plain[] = {"hexagons", "--fps=30", NULL};
+  count = 2;
+  options = take_game_options(&count, plain);
+  assert(options.valid && options.min_group == AUTOMATIC_MIN_GROUP);
+  assert(count == 2 && !strcmp(plain[1], "--fps=30"));
+
+  // Given twice, the last one counts
+  char* twice[] = {"hexagons", "--min-group=4", "--min-group=16", NULL};
+  count = 3;
+  options = take_game_options(&count, twice);
+  assert(options.valid && options.min_group == 16 && count == 1);
+
+  // Every whole number from the smallest group there can be to the largest
+  for (int size = SMALLEST_MIN_GROUP; size <= MAX_GROUP_SIZE; ++size) {
+    char argument[32];
+    snprintf(argument, sizeof(argument), "--min-group=%d", size);
+    char* arguments[] = {"hexagons", argument, NULL};
+    count = 2;
+    options = take_game_options(&count, arguments);
+    assert(options.valid && options.min_group == size);
+  }
+
+  const char* malformed[] = {
+      "--min-group=",   "--min-group=abc", "--min-group=8x",
+      "--min-group=1",  "--min-group=0",   "--min-group=17",
+      "--min-group=-4", "--min-group=4.5", "--min-group=99999999999999999999"};
+  for (int i = 0; i < 9; ++i) {
+    char argument[64];
+    snprintf(argument, sizeof(argument), "%s", malformed[i]);
+    char* arguments[] = {"hexagons", argument, NULL};
+    count = 2;
+    options = take_game_options(&count, arguments);
+    assert(!options.valid);
+  }
+}
+
+static void the_game_plays_by_the_minimum_group_it_is_given(void) {
+  game_t game = test_game();
+  playing_stage_state_ptr state = create_playing_stage(&game);
+  int cells = hex_grid_cell_count(&state->grid);
+  assert(state->board.min_group_size == min_group_size_for(cells));
+  destroy_playing_stage(state);
+
+  game.settings.min_group = 8;
+  state = create_playing_stage(&game);
+  assert(state->board.min_group_size == 8);
+  // It holds from one game to the next
+  restart_playing_stage(state);
+  assert(state->board.min_group_size == 8);
+
+  // Seven in touch do nothing, eight merge
+  board_t* board = &state->board;
+  for (int length = 7; length <= 8; ++length) {
+    for (int row = 0; row < board->rows; ++row) {
+      for (int col = 0; col < board->cols; ++col) {
+        cell_t cell = {col, row};
+        set_board_value(board, cell, EMPTY_CELL);
+      }
+    }
+    cell_t start = {5, 5}, from = {12, 10};
+    cell_t target = lay_line(board, start, 0, length - 1, 2);
+    set_board_value(board, from, 2);
+    click_at(state, from);
+    click_at(state, target);
+    while (is_playing_stage_travelling(state))
+      advance_playing_stage(state, 1.0);
+    assert(board_value(board, target) == (length < 8 ? 2 : 16));
+  }
+  destroy_playing_stage(state);
+  assert(outstanding_allocations() == 0);
+}
+
 int main(int argc, char** argv) {
   assert(argc == 2);
   if (!strcmp(argv[1], "lifecycle"))
@@ -1603,6 +1688,10 @@ int main(int argc, char** argv) {
     the_pointer_is_a_hand_with_a_solid_outline();
   else if (!strcmp(argv[1], "hand_scale"))
     the_pointer_is_enlarged_in_whole_pixels();
+  else if (!strcmp(argv[1], "option"))
+    the_minimum_group_can_be_given_on_the_command_line();
+  else if (!strcmp(argv[1], "option_played"))
+    the_game_plays_by_the_minimum_group_it_is_given();
   else
     return 1;
   return 0;
