@@ -100,6 +100,19 @@ int board_wall_count(const board_t* board) {
   return count_cells(board, is_wall);
 }
 
+int board_empty_count(const board_t* board) {
+  return count_cells(board, is_empty);
+}
+
+int board_min_group_now(const board_t* board) {
+  int empty = board_empty_count(board);
+  bool nearly_full = empty >= 1 && empty <= board->min_group_size;
+  if (nearly_full && board->min_group_size > MIN_GROUP_SIZE) {
+    return MIN_GROUP_SIZE;
+  }
+  return board->min_group_size;
+}
+
 static bool is_selected(const board_t* board, cell_t cell) {
   return board->has_selection && board->selection.col == cell.col &&
          board->selection.row == cell.row;
@@ -212,7 +225,7 @@ settle_result_t settle_board_move(board_t* board, random_source_t* random) {
   int size = gather_group(board, moved, value, 0);
   board->merged_count = 0;
   board->merged_value = value;
-  if (size < board->min_group_size) {
+  if (size < board_min_group_now(board)) {
     populate_board(board, random, board->spawn_count);
     return SETTLED_SPAWN;
   }
@@ -307,13 +320,13 @@ static int nth_empty_cell(const board_t* board, int n) {
 static bool add_hexagon(board_t* board, random_source_t* random, int empty) {
   int first_cell = random_below(random, empty);
   int first_value = random_below(random, NEW_HEXAGON_VALUE_COUNT);
+  int min_group = board_min_group_now(board);
   for (int i = 0; i < empty; ++i) {
     int index = nth_empty_cell(board, (first_cell + i) % empty);
     cell_t cell = {index % board->cols, index / board->cols};
     for (int j = 0; j < NEW_HEXAGON_VALUE_COUNT; ++j) {
       int value = 1 << ((first_value + j) % NEW_HEXAGON_VALUE_COUNT);
-      if (gather_group(board, cell, value, board->min_group_size) <
-          board->min_group_size) {
+      if (gather_group(board, cell, value, min_group) < min_group) {
         board->values[index] = value;
         return true;
       }
@@ -323,7 +336,7 @@ static bool add_hexagon(board_t* board, random_source_t* random, int empty) {
 }
 
 int populate_board(board_t* board, random_source_t* random, int count) {
-  int empty = count_cells(board, is_empty);
+  int empty = board_empty_count(board);
   int added = 0;
   while (added < count && empty > 0 && add_hexagon(board, random, empty)) {
     --empty;

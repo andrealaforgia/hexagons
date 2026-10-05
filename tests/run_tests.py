@@ -71,6 +71,8 @@ TESTS = (
     "hand_scale",
     "option",
     "option_played",
+    "relief",
+    "relief_spawn",
 )
 
 

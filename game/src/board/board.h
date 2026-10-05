@@ -59,6 +59,16 @@ void set_board_value(board_t* board, cell_t cell, int value);
 
 int board_hexagon_count(const board_t* board);
 int board_wall_count(const board_t* board);
+int board_empty_count(const board_t* board);
+
+/**
+ * @brief How many equal hexagons must touch to merge as the board stands
+ *
+ * min_group_size, except on a nearly full board: while the empty cells
+ * number from one to min_group_size, MIN_GROUP_SIZE are enough. The full
+ * number is needed again as soon as there is more room than that.
+ */
+int board_min_group_now(const board_t* board);
 
 /**
  * @brief How many hexagons carry the same number as the one on a cell and
@@ -97,7 +107,7 @@ typedef enum {
  * @brief Apply the consequences of the last move, once it has been shown
  *
  * If the moved hexagon now touches a group of equal numbers that makes at
- * least min_group_size with it, whatever its shape, every other hexagon in
+ * least board_min_group_now with it, whatever its shape, every other hexagon in
  * the group is removed and the moved one carries their sum, rounded down to
  * a power of two. The cells emptied are left in merged.
  *
@@ -137,7 +147,8 @@ int initial_hexagon_count(int cell_count);
  * two up to MAX_NEW_HEXAGON_VALUE
  *
  * A new hexagon never completes a group that would merge: its cell and
- * number are chosen so that fewer than min_group_size equal numbers touch.
+ * number are chosen so that fewer than board_min_group_now equal numbers
+ * touch, counted afresh for each new hexagon as the board fills.
  *
  * @return How many were added: fewer than asked when the board fills up or
  * no number fits in any empty cell

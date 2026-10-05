@@ -1055,7 +1055,8 @@ static bool has_group_ready_to_merge(board_t* board) {
   for (int row = 0; row < board->rows; ++row) {
     for (int col = 0; col < board->cols; ++col) {
       cell_t cell = {col, row};
-      if (board_group_size(board, cell) >= board->min_group_size) return true;
+      if (board_group_size(board, cell) >= board_min_group_now(board))
+        return true;
     }
   }
   return false;
@@ -1576,6 +1577,96 @@ static void the_game_plays_by_the_minimum_group_it_is_given(void) {
   assert(outstanding_allocations() == 0);
 }
 
+// A full board of 48 cells asking for groups of eight, with three 2s in a
+// row, a 2 beside the gap that would make them four, and so many cells
+// emptied along the bottom row
+static void crowded_board(board_t* board, int empty_cells) {
+  assert(init_board(board, 8, 6));
+  board->min_group_size = 8;
+  board->spawn_count = 0;
+  fill_board(board);
+  cell_t first = {1, 2}, gap = {4, 2}, mover = {5, 2};
+  lay_line(board, first, 0, 3, 2);
+  set_board_value(board, gap, EMPTY_CELL);
+  set_board_value(board, mover, 2);
+  for (int col = 0; col < empty_cells - 1; ++col) {
+    cell_t cell = {col, 5};
+    set_board_value(board, cell, EMPTY_CELL);
+  }
+  assert(board_empty_count(board) == empty_cells);
+}
+
+static settle_result_t close_the_gap(board_t* board) {
+  cell_t gap = {4, 2}, mover = {5, 2};
+  random_source_t random = create_random_source(1);
+  assert(click_board_cell(board, mover) == CLICK_SELECTED);
+  assert(click_board_cell(board, gap) == CLICK_MOVED);
+  return settle_board_move(board, &random);
+}
+
+static void four_are_enough_when_the_board_is_nearly_full(void) {
+  board_t board;
+  cell_t gap = {4, 2};
+
+  // More empty cells than the group asked for: the full eight are needed
+  crowded_board(&board, 9);
+  assert(board_min_group_now(&board) == 8);
+  assert(close_the_gap(&board) == SETTLED_SPAWN);
+  assert(board_value(&board, gap) == 2);
+  destroy_board(&board);
+
+  // As few empty cells as the group asked for, down to a single one: four
+  for (int empty = 8; empty >= 1; --empty) {
+    crowded_board(&board, empty);
+    assert(board_min_group_now(&board) == 4);
+    assert(close_the_gap(&board) == SETTLED_MERGE);
+    assert(board_value(&board, gap) == 8);
+    // The merge freed three cells: with room again, eight are needed again
+    assert(board_empty_count(&board) == empty + 3);
+    assert(board_min_group_now(&board) == (empty + 3 > 8 ? 8 : 4));
+    destroy_board(&board);
+  }
+
+  // A full board has no move to make, and the rule stays as it was
+  assert(init_board(&board, 8, 6));
+  board.min_group_size = 8;
+  fill_board(&board);
+  assert(board_empty_count(&board) == 0);
+  assert(board_min_group_now(&board) == 8);
+  // A game asking for fewer than four is never made harder by this
+  board.min_group_size = 2;
+  cell_t cell = {0, 0};
+  set_board_value(&board, cell, EMPTY_CELL);
+  assert(board_min_group_now(&board) == 2);
+  board.min_group_size = 4;
+  assert(board_min_group_now(&board) == 4);
+  destroy_board(&board);
+}
+
+static void new_hexagons_avoid_groups_of_four_on_a_nearly_full_board(void) {
+  // Left to chance a 2 would land in the gap about one time in four
+  int completed_with_room = 0;
+  for (uint32_t seed = 0; seed < 200; ++seed) {
+    cell_t gap = {4, 2};
+    random_source_t random = create_random_source(seed);
+
+    // Nearly full: four in touch would merge, so the gap never takes a 2
+    board_t board;
+    crowded_board(&board, 6);
+    assert(populate_board(&board, &random, 6) == 6);
+    assert(board_value(&board, gap) != 2);
+    destroy_board(&board);
+
+    // With one more empty cell eight are needed, and four in touch are
+    // harmless: the first new hexagon may be a 2 in the gap
+    crowded_board(&board, 9);
+    assert(populate_board(&board, &random, 1) == 1);
+    completed_with_room += board_value(&board, gap) == 2;
+    destroy_board(&board);
+  }
+  assert(completed_with_room > 0);
+}
+
 int main(int argc, char** argv) {
   assert(argc == 2);
   if (!strcmp(argv[1], "lifecycle"))
@@ -1692,6 +1783,10 @@ int main(int argc, char** argv) {
     the_minimum_group_can_be_given_on_the_command_line();
   else if (!strcmp(argv[1], "option_played"))
     the_game_plays_by_the_minimum_group_it_is_given();
+  else if (!strcmp(argv[1], "relief"))
+    four_are_enough_when_the_board_is_nearly_full();
+  else if (!strcmp(argv[1], "relief_spawn"))
+    new_hexagons_avoid_groups_of_four_on_a_nearly_full_board();
   else
     return 1;
   return 0;
