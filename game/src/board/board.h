@@ -34,10 +34,10 @@ typedef struct {
   int min_group_size;  // How many equal hexagons must touch to merge
   int spawn_count;     // New hexagons after each move that merges nothing
   bool move_pending;   // A hexagon was moved and the move is not settled yet
-  cell_t* merged;      // Cells emptied, or turned to wall, by the last merge
+  cell_t* merged;      // Cells emptied, or turned to wall, by the last move
+  int* merged_values;  // The number each of them carried
   int merged_count;
-  int merged_value;  // The number the merged hexagons carried
-  int* came_from;    // Working space for finding paths
+  int* came_from;  // Working space for finding paths
   int* queue;
 } board_t;
 
@@ -114,9 +114,24 @@ typedef enum {
  * If that number would pass MAX_HEXAGON_VALUE, every hexagon in the group,
  * the moved one included, turns to wall for good instead.
  *
- * If nothing merged, spawn_count new hexagons appear, or as many as fit.
+ * If nothing merged, spawn_count new hexagons appear, or as many as fit,
+ * and then every group on the board that is big enough is cleared: see
+ * sweep_board_groups. The cells it empties are left in merged too.
  */
 settle_result_t settle_board_move(board_t* board, random_source_t* random);
+
+/**
+ * @brief Remove every group of at least board_min_group_now equal hexagons
+ * in touch, wherever it is on the board
+ *
+ * To be called whenever hexagons have been added. The hexagons are removed
+ * outright, leaving nothing in their place, and the cells they were on are
+ * left in merged. How big a group must be is settled once, before any is
+ * removed.
+ *
+ * @return How many hexagons were removed
+ */
+int sweep_board_groups(board_t* board);
 
 /**
  * @brief Whether any hexagon has an empty cell next to it to move to

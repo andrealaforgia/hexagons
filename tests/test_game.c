@@ -784,17 +784,11 @@ static void four_equal_hexagons_merge_whatever_shape_they_make(void) {
   }
 }
 
-static void a_line_merges_only_when_a_move_completes_it(void) {
+static void a_move_is_settled_once_and_only_when_asked(void) {
   board_t board;
   assert(init_board(&board, 16, 16));
   board.min_group_size = SMALL_GROUP;
-  // A line of four that was already there, and a move elsewhere
-  cell_t start = {4, 12};
-  lay_line(&board, start, 0, 4, 6);
-  cell_t target = {8, 3};
-  assert(!play_hexagon_onto(&board, target, 6));
-  assert(board_hexagon_count(&board) == 5);
-
+  board.spawn_count = 0;
   // The merge waits for the move to be settled, and happens once
   cell_t line = {4, 6};
   cell_t end = lay_line(&board, line, 0, 3, 1);
@@ -803,14 +797,28 @@ static void a_line_merges_only_when_a_move_completes_it(void) {
   click_board_cell(&board, from);
   assert(click_board_cell(&board, end) == CLICK_MOVED);
   assert(board_value(&board, end) == 1);
-  assert(board_hexagon_count(&board) == 9);
+  assert(board_hexagon_count(&board) == 4);
   random_source_t random = create_random_source(1);
   assert(settle_board_move(&board, &random) == SETTLED_MERGE);
   assert(board_value(&board, end) == 4);
-  assert(board_hexagon_count(&board) == 6);
+  assert(board_hexagon_count(&board) == 1);
   assert(settle_board_move(&board, &random) == SETTLED_NOTHING);
-  assert(board_hexagon_count(&board) == 6);
-  assert(board_value(&board, end) == 4);
+  assert(board_hexagon_count(&board) == 1);
+  destroy_board(&board);
+}
+
+static void a_group_already_on_the_board_goes_after_any_move(void) {
+  board_t board;
+  assert(init_board(&board, 16, 16));
+  // Four in touch that no move brought together, and a move elsewhere
+  cell_t start = {4, 12};
+  lay_line(&board, start, 0, 4, 4);
+  cell_t target = {8, 3};
+  assert(!play_hexagon_onto(&board, target, 4));
+  // The group is cleared outright: only the moved hexagon is left
+  assert(board_hexagon_count(&board) == 1);
+  assert(board_value(&board, target) == 4);
+  assert(board.merged_count == 4);
   destroy_board(&board);
 }
 
@@ -1667,6 +1675,134 @@ static void new_hexagons_avoid_groups_of_four_on_a_nearly_full_board(void) {
   assert(completed_with_room > 0);
 }
 
+static bool was_removed(const board_t* board, cell_t cell, int value) {
+  for (int i = 0; i < board->merged_count; ++i) {
+    if (same_cell(board->merged[i], cell)) {
+      return board->merged_values[i] == value;
+    }
+  }
+  return false;
+}
+
+static void every_group_big_enough_is_cleared_off_the_board(void) {
+  board_t board;
+  assert(init_board(&board, 16, 16));
+  assert(board_min_group_now(&board) == 4);
+  // Two groups of four or more, of different numbers and shapes
+  cell_t line = {2, 2}, clump = {8, 8};
+  lay_line(&board, line, 0, 5, 2);
+  set_board_value(&board, clump, 64);
+  for (int direction = 0; direction < 3; ++direction) {
+    set_board_value(&board, hex_neighbour(clump, direction * 2), 64);
+  }
+  // Three in touch, a lone hexagon and a wall, none of which qualify
+  cell_t three = {2, 12}, lone = {13, 3}, wall = {13, 13};
+  lay_line(&board, three, 0, 3, 8);
+  set_board_value(&board, lone, 2);
+  lay_line(&board, wall, 0, 2, WALL_CELL);
+
+  assert(sweep_board_groups(&board) == 9);
+  assert(board.merged_count == 9);
+  // Removed outright: nothing is left in their place
+  cell_t cell = line;
+  for (int i = 0; i < 5; ++i) {
+    assert(board_value(&board, cell) == EMPTY_CELL);
+    assert(was_removed(&board, cell, 2));
+    cell = hex_neighbour(cell, 0);
+  }
+  assert(board_value(&board, clump) == EMPTY_CELL);
+  assert(was_removed(&board, clump, 64));
+  for (int direction = 0; direction < 3; ++direction) {
+    assert(was_removed(&board, hex_neighbour(clump, direction * 2), 64));
+  }
+  assert(board_hexagon_count(&board) == 4);
+  assert(board_value(&board, three) == 8 && board_value(&board, lone) == 2);
+  assert(board_wall_count(&board) == 2);
+
+  // With nothing left to clear it does nothing
+  assert(sweep_board_groups(&board) == 0);
+  assert(board.merged_count == 0);
+  assert(board_hexagon_count(&board) == 4);
+  destroy_board(&board);
+}
+
+static void groups_are_cleared_when_new_hexagons_fill_the_board(void) {
+  // Eight are needed while nine cells are empty. Four 2s come together and
+  // five 4s sit elsewhere: nothing merges. Then a new hexagon leaves eight
+  // cells empty, four become enough, and both groups go.
+  board_t board;
+  crowded_board(&board, 9);
+  board.spawn_count = 1;
+  cell_t fours = {1, 0}, gap = {4, 2};
+  lay_line(&board, fours, 0, 5, 4);
+  int before = board_hexagon_count(&board);
+
+  assert(close_the_gap(&board) == SETTLED_SPAWN);
+  assert(board.merged_count >= 9);
+  // The moved hexagon goes with its group: it is not kept as a sum
+  cell_t cell = {1, 2};
+  for (int i = 0; i < 4; ++i) {
+    assert(board_value(&board, cell) == EMPTY_CELL);
+    assert(was_removed(&board, cell, 2));
+    cell = hex_neighbour(cell, 0);
+  }
+  assert(board_value(&board, gap) == EMPTY_CELL);
+  cell = fours;
+  for (int i = 0; i < 5; ++i) {
+    assert(was_removed(&board, cell, 4));
+    cell = hex_neighbour(cell, 0);
+  }
+  assert(board_hexagon_count(&board) == before + 1 - board.merged_count);
+  assert(!has_group_ready_to_merge(&board));
+  destroy_board(&board);
+
+  // A move that leaves room to spare clears nothing
+  crowded_board(&board, 9);
+  lay_line(&board, fours, 0, 5, 4);
+  assert(close_the_gap(&board) == SETTLED_SPAWN);
+  assert(board.merged_count == 0);
+  assert(board_value(&board, gap) == 2);
+  destroy_board(&board);
+}
+
+static void cleared_groups_explode_in_their_own_colours(void) {
+  game_t game = test_game();
+  game.settings.min_group = 8;
+  playing_stage_state_ptr state = create_playing_stage(&game);
+  board_t* board = &state->board;
+  fill_board(board);
+  board->spawn_count = 1;
+  // Nine empty cells: the gap and eight along the bottom row
+  cell_t first = {1, 2}, gap = {4, 2}, mover = {5, 2}, fours = {1, 0};
+  lay_line(board, first, 0, 3, 2);
+  lay_line(board, fours, 0, 5, 4);
+  set_board_value(board, gap, EMPTY_CELL);
+  set_board_value(board, mover, 2);
+  for (int col = 0; col < 8; ++col) {
+    cell_t cell = {col, board->rows - 1};
+    set_board_value(board, cell, EMPTY_CELL);
+  }
+  assert(board_empty_count(board) == 9);
+
+  click_at(state, mover);
+  click_at(state, gap);
+  while (is_playing_stage_travelling(state)) advance_playing_stage(state, 1.0);
+  assert(board->merged_count >= 9);
+  assert(debris_piece_count(&state->debris) ==
+         board->merged_count * DEBRIS_PIECES_PER_HEXAGON);
+  int twos = 0, fours_seen = 0;
+  for (int i = 0; i < state->debris.capacity; ++i) {
+    const debris_piece_t* piece = &state->debris.pieces[i];
+    if (!piece->active) continue;
+    twos += piece->color == hex_border_color(2);
+    fours_seen += piece->color == hex_border_color(4);
+  }
+  assert(twos >= 4 * DEBRIS_PIECES_PER_HEXAGON);
+  assert(fours_seen >= 5 * DEBRIS_PIECES_PER_HEXAGON);
+  destroy_playing_stage(state);
+  assert(outstanding_allocations() == 0);
+}
+
 int main(int argc, char** argv) {
   assert(argc == 2);
   if (!strcmp(argv[1], "lifecycle"))
@@ -1730,7 +1866,9 @@ int main(int argc, char** argv) {
   else if (!strcmp(argv[1], "crossing"))
     everything_equal_that_touches_merges_together();
   else if (!strcmp(argv[1], "settle"))
-    a_line_merges_only_when_a_move_completes_it();
+    a_move_is_settled_once_and_only_when_asked();
+  else if (!strcmp(argv[1], "standing_group"))
+    a_group_already_on_the_board_goes_after_any_move();
   else if (!strcmp(argv[1], "arrival"))
     the_merge_shows_when_the_hexagon_arrives();
   else if (!strcmp(argv[1], "burst"))
@@ -1787,6 +1925,12 @@ int main(int argc, char** argv) {
     four_are_enough_when_the_board_is_nearly_full();
   else if (!strcmp(argv[1], "relief_spawn"))
     new_hexagons_avoid_groups_of_four_on_a_nearly_full_board();
+  else if (!strcmp(argv[1], "sweep"))
+    every_group_big_enough_is_cleared_off_the_board();
+  else if (!strcmp(argv[1], "sweep_spawn"))
+    groups_are_cleared_when_new_hexagons_fill_the_board();
+  else if (!strcmp(argv[1], "sweep_explode"))
+    cleared_groups_explode_in_their_own_colours();
   else
     return 1;
   return 0;

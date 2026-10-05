@@ -38,14 +38,14 @@ bool init_board(board_t* board, int cols, int rows) {
   board->spawn_count = spawn_hexagon_count(cols * rows);
   board->min_group_size = min_group_size_for(cols * rows);
   board->merged_count = 0;
-  board->merged_value = EMPTY_CELL;
   board->merged = calloc(cells, sizeof(cell_t));
+  board->merged_values = calloc(cells, sizeof(int));
   board->values = calloc(cells, sizeof(int));
   board->path = calloc(cells, sizeof(cell_t));
   board->came_from = calloc(cells, sizeof(int));
   board->queue = calloc(cells, sizeof(int));
-  if (!board->values || !board->path || !board->merged || !board->came_from ||
-      !board->queue) {
+  if (!board->values || !board->path || !board->merged ||
+      !board->merged_values || !board->came_from || !board->queue) {
     destroy_board(board);
     return false;
   }
@@ -56,11 +56,13 @@ void destroy_board(board_t* board) {
   free(board->values);
   free(board->path);
   free(board->merged);
+  free(board->merged_values);
   free(board->came_from);
   free(board->queue);
   board->values = NULL;
   board->path = NULL;
   board->merged = NULL;
+  board->merged_values = NULL;
   board->came_from = NULL;
   board->queue = NULL;
 }
@@ -215,6 +217,43 @@ static int largest_power_of_two_up_to(int number) {
   return power;
 }
 
+// Notes that the hexagon on a cell is going, and what number it carried
+static void record_merged(board_t* board, int index) {
+  cell_t cell = {index % board->cols, index / board->cols};
+  board->merged[board->merged_count] = cell;
+  board->merged_values[board->merged_count] = board->values[index];
+  ++board->merged_count;
+}
+
+// Removes every group of at least so many, adding its cells to merged
+static int remove_groups(board_t* board, int min_group) {
+  int removed = 0;
+  for (int index = 0; index < cell_count(board); ++index) {
+    int value = board->values[index];
+    if (!is_hexagon(value)) {
+      continue;
+    }
+    cell_t cell = {index % board->cols, index / board->cols};
+    int size = gather_group(board, cell, value, 0);
+    if (size < min_group) {
+      continue;
+    }
+    for (int i = 0; i < size; ++i) {
+      record_merged(board, board->queue[i]);
+      board->values[board->queue[i]] = EMPTY_CELL;
+    }
+    removed += size;
+  }
+  return removed;
+}
+
+int sweep_board_groups(board_t* board) {
+  board->merged_count = 0;
+  // Clearing a group makes room, which could raise the bar for the next:
+  // every group is held to the bar as it stood when the sweep began
+  return remove_groups(board, board_min_group_now(board));
+}
+
 settle_result_t settle_board_move(board_t* board, random_source_t* random) {
   if (!board->move_pending) {
     return SETTLED_NOTHING;
@@ -224,19 +263,17 @@ settle_result_t settle_board_move(board_t* board, random_source_t* random) {
   int value = board_value(board, moved);
   int size = gather_group(board, moved, value, 0);
   board->merged_count = 0;
-  board->merged_value = value;
   if (size < board_min_group_now(board)) {
     populate_board(board, random, board->spawn_count);
+    sweep_board_groups(board);
     return SETTLED_SPAWN;
   }
   int merged_value = largest_power_of_two_up_to(value * size);
   bool walled = merged_value > MAX_HEXAGON_VALUE;
   // The moved hexagon is first in the queue; the rest are the others
   for (int i = 1; i < size; ++i) {
-    int index = board->queue[i];
-    cell_t cell = {index % board->cols, index / board->cols};
-    board->merged[board->merged_count++] = cell;
-    board->values[index] = walled ? WALL_CELL : EMPTY_CELL;
+    record_merged(board, board->queue[i]);
+    board->values[board->queue[i]] = walled ? WALL_CELL : EMPTY_CELL;
   }
   set_board_value(board, moved, walled ? WALL_CELL : merged_value);
   return walled ? SETTLED_WALL : SETTLED_MERGE;

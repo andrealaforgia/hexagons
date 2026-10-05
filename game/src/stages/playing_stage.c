@@ -51,11 +51,24 @@ playing_stage_state_ptr create_playing_stage(game_ptr game) {
   return state;
 }
 
+// The hexagons the board has just removed burst where they stood
+static void burst_merged_hexagons(playing_stage_state_ptr state) {
+  const board_t* board = &state->board;
+  for (int i = 0; i < board->merged_count; ++i) {
+    burst_hexagon(&state->debris, &state->effects_random,
+                  hex_cell_centre(&state->grid, board->merged[i]),
+                  state->grid.radius * HEX_DRAWN_RADIUS_FRACTION,
+                  hex_border_color(board->merged_values[i]));
+  }
+}
+
 void restart_playing_stage(playing_stage_state_ptr state) {
   reset_board(&state->board);
   clear_debris(&state->debris);
   populate_board(&state->board, &state->random,
                  initial_hexagon_count(hex_grid_cell_count(&state->grid)));
+  sweep_board_groups(&state->board);
+  burst_merged_hexagons(state);
   state->travelling = false;
   state->game_over = !board_has_move(&state->board);
   state->game_over_seconds = 0;
@@ -120,17 +133,6 @@ bool is_playing_stage_travelling(const playing_stage_state_ptr state) {
   return state->travelling;
 }
 
-// The hexagons a merge removed burst where they stood
-static void burst_merged_hexagons(playing_stage_state_ptr state) {
-  const board_t* board = &state->board;
-  for (int i = 0; i < board->merged_count; ++i) {
-    burst_hexagon(&state->debris, &state->effects_random,
-                  hex_cell_centre(&state->grid, board->merged[i]),
-                  state->grid.radius * HEX_DRAWN_RADIUS_FRACTION,
-                  hex_border_color(board->merged_value));
-  }
-}
-
 static void advance_travel(playing_stage_state_ptr state, double delta_time) {
   if (!state->travelling) {
     return;
@@ -139,7 +141,8 @@ static void advance_travel(playing_stage_state_ptr state, double delta_time) {
   if (state->travel_progress >= travel_steps(state)) {
     state->travel_progress = travel_steps(state);
     state->travelling = false;
-    if (settle_board_move(&state->board, &state->random) == SETTLED_MERGE) {
+    // Whatever the move removed bursts; what it turned to wall does not
+    if (settle_board_move(&state->board, &state->random) != SETTLED_WALL) {
       burst_merged_hexagons(state);
     }
     state->game_over = !board_has_move(&state->board);

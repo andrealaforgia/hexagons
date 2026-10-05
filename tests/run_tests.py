@@ -45,6 +45,7 @@ TESTS = (
     "equal",
     "crossing",
     "settle",
+    "standing_group",
     "arrival",
     "burst",
     "arc",
@@ -73,6 +74,9 @@ TESTS = (
     "option_played",
     "relief",
     "relief_spawn",
+    "sweep",
+    "sweep_spawn",
+    "sweep_explode",
 )
 
 
